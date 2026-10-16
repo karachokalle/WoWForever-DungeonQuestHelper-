@@ -1,10 +1,19 @@
 local ADDON = ...
 WFDQHDB = WFDQHDB or { hideTooHigh = false, hideCompleted = true, filter = "All" }
+WFDQHDB.activeTab = WFDQHDB.activeTab or "quests"
 WFDQH_UpdateRequested = WFDQH_UpdateRequested or false
 if WFDQHDB.hideCompleted == nil then WFDQHDB.hideCompleted = true end
 
 local frame, content, statusText, filterBox
+local questWidgets = {}
+local lootPanel, lootContent, lootStatus, lootDropdown, bossDropdown
+local lootDungeonList = WFDQH_DUNGEON_LOOT or {}
+local raidList = WFDQH_RAID_LOOT or {}
+local raidPanel, raidContent, raidStatus, raidDropdown, raidBossDropdown
+local lootLabels, raidLabels = {}, {}
+local RefreshLoot, RefreshRaid
 local ROW_HEIGHT = 100
+local Refresh
 
 local function PlayerFaction()
     return (UnitFactionGroup and UnitFactionGroup("player")) or "Both"
@@ -88,6 +97,187 @@ end
 local function ClearRows()
     if not content then return end
     for _, child in ipairs({content:GetChildren()}) do child:Hide(); child:SetParent(nil) end
+end
+
+local function ClearLootRows(targetContent, labels)
+    if not targetContent then return end
+    for _, child in ipairs({targetContent:GetChildren()}) do child:Hide(); child:SetParent(nil) end
+    for i = #labels, 1, -1 do labels[i]:Hide(); labels[i] = nil end
+end
+
+local function MakeLootItem(parent, item, bossName, x, y)
+    local itemID = tonumber(item.itemID)
+    local itemName, itemLink, quality, _, _, _, _, _, _, texture
+    if itemID and GetItemInfo then
+        itemName, itemLink, quality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+    end
+    if itemID and not texture and C_Item and C_Item.GetItemIconByID then
+        local ok, iconFileID = pcall(C_Item.GetItemIconByID, itemID)
+        if ok then texture = iconFileID end
+    end
+    if itemID and not texture and GetItemIcon then texture = GetItemIcon(itemID) end
+    if itemID and not texture then
+        if C_Item and C_Item.RequestLoadItemDataByID then
+            pcall(C_Item.RequestLoadItemDataByID, itemID)
+        elseif GetItemInfo then
+            pcall(GetItemInfo, itemID)
+        end
+    end
+    texture = texture or "Interface\\Icons\\INV_Misc_QuestionMark"
+    local card = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    card:SetSize(244, 54)
+    card:SetPoint("TOPLEFT", x, y)
+    card:EnableMouse(true)
+    card:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background" })
+    card:SetBackdropColor(0.06, 0.07, 0.09, 0.9)
+
+    local icon = card:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(34, 34)
+    icon:SetPoint("LEFT", card, "LEFT", 7, 0)
+    icon:SetTexture(texture)
+
+    local name = itemName or item.name or (itemID and ("Gegenstand #" .. itemID)) or "Unbekannter Gegenstand"
+    if quality and GetItemQualityColor then
+        local red, green, blue = GetItemQualityColor(quality)
+        if red and green and blue then
+            name = ("|cff%02x%02x%02x%s|r"):format(math.floor(red * 255 + 0.5), math.floor(green * 255 + 0.5), math.floor(blue * 255 + 0.5), name)
+        end
+    end
+    local itemText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    itemText:SetPoint("TOPLEFT", icon, "TOPRIGHT", 6, -1)
+    itemText:SetWidth(190)
+    itemText:SetJustifyH("LEFT")
+    itemText:SetText(name)
+
+    local chanceText = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    chanceText:SetPoint("TOPLEFT", itemText, "BOTTOMLEFT", 0, -5)
+    chanceText:SetWidth(190)
+    chanceText:SetJustifyH("LEFT")
+    chanceText:SetText(item.dropChance and ("Dropchance: %.2f%%"):format(tonumber(item.dropChance) or 0) or "Dropchance nicht hinterlegt")
+
+    card:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if itemLink then GameTooltip:SetHyperlink(itemLink)
+        elseif itemID then GameTooltip:SetHyperlink("item:" .. tostring(itemID))
+        else GameTooltip:SetText(name) end
+        GameTooltip:AddLine("Boss: " .. tostring(bossName), 0.8, 0.8, 0.8, true)
+        if item.dropChance then
+            GameTooltip:AddLine(("Beobachtete Dropchance: %.2f%%"):format(tonumber(item.dropChance) or 0), 0.4, 1, 0.4, true)
+        else
+            GameTooltip:AddLine("Für diesen Gegenstand ist keine Dropchance in der Datenquelle hinterlegt.", 1, 0.8, 0.3, true)
+        end
+        GameTooltip:AddLine("Shift + Linksklick: am Charakter anprobieren", 0.7, 0.85, 1, true)
+        GameTooltip:Show()
+    end)
+    card:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    card:SetScript("OnClick", function(_, button)
+        if button ~= "LeftButton" or not IsShiftKeyDown() then return end
+        local link = itemLink or (itemID and ("item:" .. tostring(itemID)))
+        if link and DressUpItemLink then DressUpItemLink(link)
+        elseif itemID and DressUpItem then DressUpItem(itemID) end
+    end)
+    card:Show()
+end
+
+local function RefreshLootView(dataList, instanceKey, bossKey, instanceDropdown, selectedBossDropdown, targetContent, targetStatus, labels, kind, refreshFunction)
+    if not targetContent then return end
+    ClearLootRows(targetContent, labels)
+    if not dataList or #dataList == 0 then
+        targetStatus:SetText("Für die Datenbank sind noch keine " .. kind .. "-Drops hinterlegt.")
+        return
+    end
+    local selected = WFDQHDB[instanceKey] or dataList[1].name
+    local instance
+    for _, candidate in ipairs(dataList) do
+        if candidate.name == selected then instance = candidate; break end
+    end
+    instance = instance or dataList[1]
+    WFDQHDB[instanceKey] = instance.name
+    if instanceDropdown and UIDropDownMenu_SetSelectedValue then
+        UIDropDownMenu_SetSelectedValue(instanceDropdown, instance.name)
+        UIDropDownMenu_SetText(instanceDropdown, instance.name)
+    end
+
+    local bosses = instance.bosses or {}
+    local selectedBoss = WFDQHDB[bossKey] or "All"
+    local bossExists = selectedBoss == "All"
+    for _, boss in ipairs(bosses) do
+        if (boss.name or boss.boss) == selectedBoss then bossExists = true; break end
+    end
+    if not bossExists then selectedBoss = "All"; WFDQHDB[bossKey] = "All" end
+    if selectedBossDropdown then
+        UIDropDownMenu_Initialize(selectedBossDropdown, function(_, level)
+            local allInfo = UIDropDownMenu_CreateInfo()
+            allInfo.text = "Alle Bosse"
+            allInfo.value = "All"
+            allInfo.func = function()
+                WFDQHDB[bossKey] = "All"
+                UIDropDownMenu_SetSelectedValue(selectedBossDropdown, "All")
+                UIDropDownMenu_SetText(selectedBossDropdown, "Alle Bosse")
+                refreshFunction()
+            end
+            UIDropDownMenu_AddButton(allInfo, level)
+            for _, boss in ipairs(bosses) do
+                local bossName = boss.name or boss.boss or "Unbekannter Boss"
+                local info = UIDropDownMenu_CreateInfo()
+                info.text = bossName
+                info.value = bossName
+                info.func = function()
+                    WFDQHDB[bossKey] = bossName
+                    UIDropDownMenu_SetSelectedValue(selectedBossDropdown, bossName)
+                    UIDropDownMenu_SetText(selectedBossDropdown, bossName)
+                    refreshFunction()
+                end
+                UIDropDownMenu_AddButton(info, level)
+            end
+        end)
+        local bossLabel = selectedBoss == "All" and "Alle Bosse" or selectedBoss
+        UIDropDownMenu_SetSelectedValue(selectedBossDropdown, selectedBoss)
+        UIDropDownMenu_SetText(selectedBossDropdown, bossLabel)
+    end
+    local totalItems, knownRates = 0, 0
+    local shownBosses = 0
+    local y = -4
+    for _, boss in ipairs(bosses) do
+        local bossName = boss.name or boss.boss or "Unbekannter Boss"
+        if selectedBoss == "All" or bossName == selectedBoss then
+            shownBosses = shownBosses + 1
+            local header = targetContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            table.insert(labels, header)
+            header:SetPoint("TOPLEFT", 4, y)
+            header:SetWidth(500)
+            header:SetText(bossName)
+            y = y - 27
+            local items = boss.loot or boss.items or {}
+            for i, item in ipairs(items) do
+                totalItems = totalItems + 1
+                if tonumber(item.dropChance) then knownRates = knownRates + 1 end
+                local column = (i - 1) % 2
+                local row = math.floor((i - 1) / 2)
+                MakeLootItem(targetContent, item, bossName, column * 250, y - row * 58)
+            end
+            y = y - math.ceil(#items / 2) * 62 - 8
+        end
+    end
+    if totalItems == 0 then
+        local empty = targetContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        table.insert(labels, empty)
+        empty:SetPoint("TOPLEFT", 6, -8)
+        empty:SetWidth(480)
+        empty:SetJustifyH("LEFT")
+        empty:SetText(selectedBoss == "All" and ("Für diesen " .. kind .. " sind in der verwendeten AtlasLoot-Datenquelle noch keine Boss-Drops hinterlegt.") or "Für diesen Boss sind in der verwendeten AtlasLoot-Datenquelle noch keine Drops hinterlegt.")
+        y = -56
+    end
+    targetContent:SetHeight(math.max(1, -y))
+    targetStatus:SetText(("%s · %d/%d Bosse · %d Gegenstände · Dropchance bei %d Gegenständen hinterlegt · Quelle: AtlasLoot Classic Forever"):format(instance.name, shownBosses, #bosses, totalItems, knownRates))
+end
+
+RefreshLoot = function()
+    RefreshLootView(lootDungeonList, "lootDungeon", "lootBoss", lootDropdown, bossDropdown, lootContent, lootStatus, lootLabels, "Dungeon", RefreshLoot)
+end
+
+RefreshRaid = function()
+    RefreshLootView(raidList, "raidInstance", "raidBoss", raidDropdown, raidBossDropdown, raidContent, raidStatus, raidLabels, "Raid", RefreshRaid)
 end
 
 local activeWaypoint
@@ -370,6 +560,60 @@ local function SetWaypoint(q)
     print('|cff33ff99WFDQH Ingame-Pin gesetzt:|r ' .. tostring(q.giver or q.title) .. ' – ' .. tostring(GetTargetZone(q)) .. ' (' .. math.floor(x*100+0.5) .. ', ' .. math.floor(y*100+0.5) .. '). /dqhelp clear zum Entfernen.')
 end
 
+local function GetQuestLogXP(q)
+    if not GetQuestLogRewardXP then return nil end
+    local ids = {}
+    if q.questID then table.insert(ids, q.questID) end
+    for _, questID in ipairs(q.questIDs or {}) do
+        local duplicate = false
+        for _, existingID in ipairs(ids) do
+            if existingID == questID then duplicate = true; break end
+        end
+        if not duplicate then table.insert(ids, questID) end
+    end
+    for _, questID in ipairs(ids) do
+        -- WoW Forever's 1.60.1 API accepts the quest ID directly and returns
+        -- the character-specific total XP, including current quest bonuses.
+        local ok, totalXP = pcall(GetQuestLogRewardXP, questID)
+        if ok and tonumber(totalXP) and tonumber(totalXP) >= 0 then
+            return tonumber(totalXP)
+        end
+    end
+end
+
+local function GetQuestXP(q)
+    local xp = GetQuestLogXP(q)
+    if xp then return xp, "Spiel-API" end
+    xp = tonumber(q.xpReward)
+    if xp and xp >= 0 then return xp, "Datenbank", tonumber(q.xpRewardLevel) or tonumber(q.questLevel) end
+end
+
+local function GetXPProgressText(q)
+    local xp, source, xpLevel = GetQuestXP(q)
+    if not xp then
+        return "Erfahrung: Für diese Quest-ID hat der Client keinen XP-Wert geliefert."
+    end
+    local playerLevel = UnitLevel and tonumber(UnitLevel("player")) or nil
+    if source == "Datenbank" and xpLevel and playerLevel and playerLevel ~= xpLevel then
+        return ("Erfahrung: %d EP sind bei Queststufe %d dokumentiert; ein verlässlicher Prozentwert für Stufe %d liegt nicht vor."):format(xp, xpLevel, playerLevel)
+    end
+    local xpMax = UnitXPMax and tonumber(UnitXPMax("player")) or nil
+    if not xpMax or xpMax <= 0 then
+        return ("Erfahrung: %d EP · Quelle: %s"):format(xp, source)
+    end
+    local gainedPercent = xp / xpMax * 100
+    local currentXP = UnitXP and tonumber(UnitXP("player")) or nil
+    local text = ("Erfahrung: %d EP = %.1f%% dieses Levelbalkens"):format(xp, gainedPercent)
+    if currentXP then
+        local currentPercent = currentXP / xpMax * 100
+        local remainingXP = math.max(0, xpMax - currentXP)
+        text = text .. (xp >= remainingXP
+            and (" · aktuell %.1f%%, reicht für den nächsten Levelaufstieg"):format(currentPercent)
+            or (" · aktuell %.1f%%, danach %.1f%%"):format(currentPercent, (currentXP + xp) / xpMax * 100))
+    end
+    return text .. " · " .. source
+end
+
 local function MakeRow(q, index, offset)
     local rewards = q.rewards or {}
     local hasRewards = q.xpReward or q.moneyReward or #rewards > 0
@@ -384,7 +628,11 @@ local function MakeRow(q, index, offset)
         summary = "Belohnungen nicht verifiziert"
     end
     local expanded = expandedQuestTitle == q.title
-    local rowHeight = ROW_HEIGHT + (expanded and 38 or 0)
+    -- The reward line sits below the prerequisite text; reserve enough room for
+    -- it so it remains visible inside the scroll row after expanding.
+    local rewardColumns = 2
+    local rewardRows = math.ceil(#rewards / rewardColumns)
+    local rowHeight = ROW_HEIGHT + (expanded and (68 + rewardRows * 26) or 0)
     local row = CreateFrame("Button", nil, content, "BackdropTemplate")
     row:SetSize(505, rowHeight)
     row:SetPoint("TOPLEFT", 0, -offset)
@@ -434,31 +682,92 @@ local function MakeRow(q, index, offset)
     pin:SetText("Pin")
     pin:SetScript("OnClick", function() SetWaypoint(q) end)
     if expanded then
-        local rewardDetails = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        rewardDetails:SetPoint("TOPLEFT", pre, "BOTTOMLEFT", 0, -4)
-        rewardDetails:SetWidth(480)
+        local rewardHeading = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        rewardHeading:SetPoint("TOPLEFT", pre, "BOTTOMLEFT", 0, -5)
+        rewardHeading:SetWidth(480)
+        local xpProgress = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        xpProgress:SetPoint("TOPLEFT", rewardHeading, "BOTTOMLEFT", 0, -4)
+        xpProgress:SetWidth(480)
+        xpProgress:SetJustifyH("LEFT")
+        xpProgress:SetText(GetXPProgressText(q))
         if hasRewards then
-            local lines = {}
-            if q.xpReward then table.insert(lines, "Erfahrung: " .. tostring(q.xpReward) .. " EP") end
-            if q.moneyReward then table.insert(lines, "Geld: " .. tostring(q.moneyReward)) end
-            for _, reward in ipairs(rewards) do
-                local name = reward.name or reward
-                if reward.itemID and GetItemInfo then name = GetItemInfo(reward.itemID) or name end
-                table.insert(lines, "Gegenstand: " .. tostring(name))
+            local heading = {}
+            if q.rewardChoices then table.insert(heading, "Belohnungsauswahl – wähle einen Gegenstand")
+            else table.insert(heading, "Questbelohnung") end
+            if q.xpReward then table.insert(heading, "Erfahrung: " .. tostring(q.xpReward) .. " EP") end
+            if q.moneyReward then table.insert(heading, "Geld: " .. tostring(q.moneyReward)) end
+            rewardHeading:SetText(table.concat(heading, " · "))
+
+            for rewardIndex, reward in ipairs(rewards) do
+                local itemID = type(reward) == "table" and reward.itemID or nil
+                local fallbackName = type(reward) == "table" and reward.name or tostring(reward)
+                local itemName, itemLink, quality, itemLevel, minLevel, itemType, itemSubType, stackCount, equipLoc, texture
+                if itemID and GetItemInfo then
+                    itemName, itemLink, quality, itemLevel, minLevel, itemType, itemSubType, stackCount, equipLoc, texture = GetItemInfo(itemID)
+                end
+                local itemButton = CreateFrame("Button", nil, row)
+                itemButton:SetSize(232, 24)
+                local column = (rewardIndex - 1) % rewardColumns
+                local itemRow = math.floor((rewardIndex - 1) / rewardColumns)
+                itemButton:SetPoint("TOPLEFT", xpProgress, "BOTTOMLEFT", column * 240, -4 - itemRow * 26)
+                itemButton:EnableMouse(true)
+                local icon = itemButton:CreateTexture(nil, "ARTWORK")
+                icon:SetSize(20, 20)
+                icon:SetPoint("LEFT", itemButton, "LEFT", 0, 0)
+                icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
+                local itemText = itemButton:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                itemText:SetPoint("LEFT", icon, "RIGHT", 5, 0)
+                itemText:SetWidth(204)
+                itemText:SetJustifyH("LEFT")
+                local displayName = itemName or fallbackName or (itemID and ("Gegenstand #" .. itemID)) or "Unbekannter Gegenstand"
+                if quality and GetItemQualityColor then
+                    local red, green, blue = GetItemQualityColor(quality)
+                    if red and green and blue then
+                        local hex = ("%02x%02x%02x"):format(math.floor(red * 255 + 0.5), math.floor(green * 255 + 0.5), math.floor(blue * 255 + 0.5))
+                        displayName = "|c" .. hex .. displayName .. "|r"
+                    end
+                end
+                itemText:SetText(displayName)
+                itemButton:SetScript("OnEnter", function(self)
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    if itemLink then
+                        GameTooltip:SetHyperlink(itemLink)
+                    elseif itemID then
+                        GameTooltip:SetHyperlink("item:" .. tostring(itemID))
+                    else
+                        GameTooltip:SetText(displayName)
+                    end
+                    if not itemLink and not itemName then
+                        GameTooltip:AddLine("Gegenstandsdaten werden vom Spiel geladen.", 0.8, 0.8, 0.8, true)
+                    end
+                    GameTooltip:AddLine("Shift + Linksklick: am Charakter anprobieren", 0.7, 0.85, 1, true)
+                    GameTooltip:Show()
+                end)
+                itemButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+                itemButton:SetScript("OnClick", function(_, button)
+                    if button ~= "LeftButton" or not IsShiftKeyDown() then return end
+                    local link = itemLink or (itemID and ("item:" .. tostring(itemID)))
+                    if link and DressUpItemLink then
+                        DressUpItemLink(link)
+                    elseif itemID and DressUpItem then
+                        DressUpItem(itemID)
+                    else
+                        print("|cffffcc00WFDQH:|r Anprobieren ist für diesen Gegenstand in diesem Client nicht verfügbar.")
+                    end
+                end)
+                itemButton:Show()
             end
-            if q.rewardChoices then table.insert(lines, 1, "Wähle einen Gegenstand") end
-            rewardDetails:SetText("Belohnungen: " .. table.concat(lines, " · "))
         elseif q.rewardDataVerified then
-            rewardDetails:SetText("Keine Geld- oder Gegenstandsbelohnung dokumentiert; XP-Angaben fehlen in der Quelle.")
+            rewardHeading:SetText("Keine Geld- oder Gegenstandsbelohnung dokumentiert; XP-Angaben fehlen in der Quelle.")
         else
-            rewardDetails:SetText("Für diese Quest gibt es noch keine bestätigten Forever-Belohnungsdaten.")
+            rewardHeading:SetText("Für diese Quest gibt es noch keine bestätigten Forever-Belohnungsdaten.")
         end
     end
     row:Show()
     return rowHeight
 end
 
-local function Refresh()
+Refresh = function()
     if not content then return end
     ClearRows()
     local all = WFDQH_QUESTS or {}
@@ -519,12 +828,42 @@ local function CreateWindow()
     frame:SetClampedToScreen(true); frame:Hide()
     frame.TitleText:SetText("WoW Forever – Dungeon Quest Helper")
 
+    local function TrackQuestWidget(widget)
+        table.insert(questWidgets, widget)
+        return widget
+    end
+    local function SetActiveTab(tab)
+        WFDQHDB.activeTab = tab
+        for _, widget in ipairs(questWidgets) do
+            if tab == "quests" then widget:Show() else widget:Hide() end
+        end
+        if lootPanel then lootPanel:SetShown(tab == "loot") end
+        if raidPanel then raidPanel:SetShown(tab == "raids") end
+        if tab == "loot" then RefreshLoot()
+        elseif tab == "raids" then RefreshRaid()
+        else Refresh() end
+    end
+    local questsTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    questsTab:SetSize(112, 22); questsTab:SetPoint("TOPLEFT", 16, -30)
+    questsTab:SetText("Quests")
+    questsTab:SetScript("OnClick", function() SetActiveTab("quests") end)
+    local lootTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    lootTab:SetSize(112, 22); lootTab:SetPoint("LEFT", questsTab, "RIGHT", 6, 0)
+    lootTab:SetText("Dungeon Drops")
+    lootTab:SetScript("OnClick", function() SetActiveTab("loot") end)
+    local raidTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    raidTab:SetSize(90, 22); raidTab:SetPoint("LEFT", lootTab, "RIGHT", 6, 0)
+    raidTab:SetText("Raids")
+    raidTab:SetScript("OnClick", function() SetActiveTab("raids") end)
+
     local info = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    info:SetPoint("TOPLEFT", 16, -34); info:SetPoint("TOPRIGHT", -16, -34); info:SetJustifyH("LEFT")
+    info:SetPoint("TOPLEFT", 16, -58); info:SetPoint("TOPRIGHT", -16, -58); info:SetJustifyH("LEFT")
     info:SetText("Wowhead-basierte Startdatenbank. Suche nach Quest, Dungeon, Questgeber oder Gebiet.")
+    TrackQuestWidget(info)
 
     local search = CreateFrame("EditBox", "WFDQH_SearchBox", frame, "InputBoxTemplate")
-    search:SetSize(240, 24); search:SetPoint("TOPLEFT", 18, -54); search:SetAutoFocus(false)
+    search:SetSize(240, 24); search:SetPoint("TOPLEFT", 18, -78); search:SetAutoFocus(false)
+    TrackQuestWidget(search)
     search:SetText(WFDQHDB.search or "")
     search:SetScript("OnTextChanged", function(self)
         WFDQHDB.search = self:GetText() or ""
@@ -533,6 +872,7 @@ local function CreateWindow()
 
     local hide = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     hide:SetSize(160, 24); hide:SetPoint("LEFT", search, "RIGHT", 10, 0)
+    TrackQuestWidget(hide)
     hide:SetText("Level-Filter umschalten")
     hide:SetScript("OnClick", function()
         WFDQHDB.hideTooHigh = not WFDQHDB.hideTooHigh
@@ -541,7 +881,8 @@ local function CreateWindow()
 
     local updateButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     updateButton:SetSize(126, 24)
-    updateButton:SetPoint("TOPRIGHT", -16, -84)
+    updateButton:SetPoint("TOPRIGHT", -16, -78)
+    TrackQuestWidget(updateButton)
     updateButton:SetText("DB aktualisieren")
     updateButton:SetScript("OnClick", function()
         WFDQH_UpdateRequested = true
@@ -549,7 +890,8 @@ local function CreateWindow()
     end)
     local clearPinButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     clearPinButton:SetSize(126, 24)
-    clearPinButton:SetPoint("TOPRIGHT", -16, -114)
+    clearPinButton:SetPoint("TOPRIGHT", -16, -108)
+    TrackQuestWidget(clearPinButton)
     clearPinButton:SetText("Pin löschen")
     clearPinButton:SetScript("OnClick", function()
         ClearNativeWaypoint()
@@ -563,12 +905,14 @@ local function CreateWindow()
     -- Backward-compatible with SavedVariables from versions before dungeon sorting.
     if WFDQHDB.sortBy.dungeon == nil then WFDQHDB.sortBy.dungeon = false end
     local sortLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    sortLabel:SetPoint("TOPLEFT", 18, -84)
+    sortLabel:SetPoint("TOPLEFT", 18, -108)
     sortLabel:SetText("Sortieren nach:")
+    TrackQuestWidget(sortLabel)
     local function MakeSortCheck(label, key, x)
         local cb = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
         cb:SetSize(22, 22)
-        cb:SetPoint("TOPLEFT", x, -98)
+        cb:SetPoint("TOPLEFT", x, -122)
+        TrackQuestWidget(cb)
         cb:SetChecked(WFDQHDB.sortBy[key] and true or false)
         cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         cb.text:SetPoint("LEFT", cb, "RIGHT", 0, 0)
@@ -593,7 +937,8 @@ local function CreateWindow()
 
     local completedCheck = CreateFrame("CheckButton", "WFDQH_HideCompletedCheck", frame, "UICheckButtonTemplate")
     completedCheck:SetSize(22, 22)
-    completedCheck:SetPoint("TOPLEFT", 18, -119)
+    completedCheck:SetPoint("TOPLEFT", 18, -143)
+    TrackQuestWidget(completedCheck)
     completedCheck:SetChecked(WFDQHDB.hideCompleted and true or false)
     completedCheck.text = completedCheck:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     completedCheck.text:SetPoint("LEFT", completedCheck, "RIGHT", 0, 0)
@@ -606,11 +951,77 @@ local function CreateWindow()
 
     statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     statusText:SetPoint("BOTTOMLEFT", 14, 12); statusText:SetPoint("BOTTOMRIGHT", -14, 12); statusText:SetJustifyH("LEFT")
+    TrackQuestWidget(statusText)
 
     local scroll = CreateFrame("ScrollFrame", "WFDQH_ScrollFrame", frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 16, -158); scroll:SetPoint("BOTTOMRIGHT", -34, 38)
+    scroll:SetPoint("TOPLEFT", 16, -176); scroll:SetPoint("BOTTOMRIGHT", -34, 38)
     content = CreateFrame("Frame", nil, scroll); content:SetSize(515, 1); scroll:SetScrollChild(content)
-    frame:SetScript("OnShow", Refresh)
+    TrackQuestWidget(scroll)
+
+    lootPanel = CreateFrame("Frame", nil, frame)
+    lootPanel:SetPoint("TOPLEFT", 12, -56); lootPanel:SetPoint("BOTTOMRIGHT", -28, 36)
+    lootDropdown = CreateFrame("Frame", "WFDQH_LootDungeonDropdown", lootPanel, "UIDropDownMenuTemplate")
+    lootDropdown:SetPoint("TOPLEFT", -12, 4)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(lootDropdown, 190) end
+    UIDropDownMenu_Initialize(lootDropdown, function(_, level)
+        for _, dungeon in ipairs(lootDungeonList or {}) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = dungeon.name
+            info.value = dungeon.name
+            info.func = function()
+                WFDQHDB.lootDungeon = dungeon.name
+                WFDQHDB.lootBoss = "All"
+                UIDropDownMenu_SetSelectedValue(lootDropdown, dungeon.name)
+                UIDropDownMenu_SetText(lootDropdown, dungeon.name)
+                RefreshLoot()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    bossDropdown = CreateFrame("Frame", "WFDQH_LootBossDropdown", lootPanel, "UIDropDownMenuTemplate")
+    bossDropdown:SetPoint("LEFT", lootDropdown, "RIGHT", -18, 0)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(bossDropdown, 190) end
+    local lootScroll = CreateFrame("ScrollFrame", "WFDQH_LootScrollFrame", lootPanel, "UIPanelScrollFrameTemplate")
+    lootScroll:SetPoint("TOPLEFT", 8, -34); lootScroll:SetPoint("BOTTOMRIGHT", -22, 25)
+    lootContent = CreateFrame("Frame", nil, lootScroll); lootContent:SetSize(500, 1); lootScroll:SetScrollChild(lootContent)
+    lootStatus = lootPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    lootStatus:SetPoint("BOTTOMLEFT", 6, 5); lootStatus:SetPoint("BOTTOMRIGHT", -6, 5); lootStatus:SetJustifyH("LEFT")
+    lootPanel:Hide()
+    raidPanel = CreateFrame("Frame", nil, frame)
+    raidPanel:SetPoint("TOPLEFT", 12, -56); raidPanel:SetPoint("BOTTOMRIGHT", -28, 36)
+    raidDropdown = CreateFrame("Frame", "WFDQH_RaidDropdown", raidPanel, "UIDropDownMenuTemplate")
+    raidDropdown:SetPoint("TOPLEFT", -12, 4)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(raidDropdown, 190) end
+    UIDropDownMenu_Initialize(raidDropdown, function(_, level)
+        for _, raid in ipairs(raidList or {}) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = raid.name
+            info.value = raid.name
+            info.func = function()
+                WFDQHDB.raidInstance = raid.name
+                WFDQHDB.raidBoss = "All"
+                UIDropDownMenu_SetSelectedValue(raidDropdown, raid.name)
+                UIDropDownMenu_SetText(raidDropdown, raid.name)
+                RefreshRaid()
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    raidBossDropdown = CreateFrame("Frame", "WFDQH_RaidBossDropdown", raidPanel, "UIDropDownMenuTemplate")
+    raidBossDropdown:SetPoint("LEFT", raidDropdown, "RIGHT", -18, 0)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(raidBossDropdown, 190) end
+    local raidScroll = CreateFrame("ScrollFrame", "WFDQH_RaidScrollFrame", raidPanel, "UIPanelScrollFrameTemplate")
+    raidScroll:SetPoint("TOPLEFT", 8, -34); raidScroll:SetPoint("BOTTOMRIGHT", -22, 25)
+    raidContent = CreateFrame("Frame", nil, raidScroll); raidContent:SetSize(500, 1); raidScroll:SetScrollChild(raidContent)
+    raidStatus = raidPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    raidStatus:SetPoint("BOTTOMLEFT", 6, 5); raidStatus:SetPoint("BOTTOMRIGHT", -6, 5); raidStatus:SetJustifyH("LEFT")
+    raidPanel:Hide()
+    frame:SetScript("OnShow", function()
+        if WFDQHDB.activeTab == "loot" then RefreshLoot()
+        elseif WFDQHDB.activeTab == "raids" then RefreshRaid()
+        else Refresh() end
+    end)
+    SetActiveTab(WFDQHDB.activeTab)
     if WorldMapFrame then WorldMapFrame:HookScript('OnShow', UpdateMapPin); WorldMapFrame:HookScript('OnHide', RemoveMapPin) end
 end
 
@@ -700,9 +1111,31 @@ events:SetScript("OnEvent", function(_, event)
         print("|cff33ff99WFDQH geladen.|r Öffnen mit |cffffff00/dqhelp|r. Datenbank: " .. tostring(WFDQH_DATABASE_VERSION or "unbekannt") .. " (" .. tostring(WFDQH_DATABASE_UPDATED or "?") .. ").")
         if WFDQH_UpdateRequested then print("|cffffcc00WFDQH:|r Update-Anforderung gespeichert. Begleitprogramm sollte sie nach /reload erkennen.") end
     end
-    if frame and frame:IsShown() then Refresh() end
+    if frame and frame:IsShown() then
+        if WFDQHDB.activeTab == "loot" then RefreshLoot()
+        elseif WFDQHDB.activeTab == "raids" then RefreshRaid()
+        else Refresh() end
+    end
     if activeWaypoint then UpdateWaypointArrow(); UpdateMapPin() end
 end)
+
+-- Item data (including the original icon and item link) may be filled by the
+-- client asynchronously. Refresh an open list once the item cache updates.
+local itemInfoEvents = CreateFrame("Frame")
+local itemInfoEventRegistered = pcall(itemInfoEvents.RegisterEvent, itemInfoEvents, "GET_ITEM_INFO_RECEIVED")
+if C_Item and C_Item.RequestLoadItemDataByID then
+    local ok = pcall(itemInfoEvents.RegisterEvent, itemInfoEvents, "ITEM_DATA_LOAD_RESULT")
+    itemInfoEventRegistered = itemInfoEventRegistered or ok
+end
+if itemInfoEventRegistered then
+    itemInfoEvents:SetScript("OnEvent", function()
+        if frame and frame:IsShown() then
+            if WFDQHDB.activeTab == "loot" then RefreshLoot()
+            elseif WFDQHDB.activeTab == "raids" then RefreshRaid()
+            else Refresh() end
+        end
+    end)
+end
 
 local waypointUpdater = CreateFrame('Frame')
 local elapsedSinceUpdate = 0

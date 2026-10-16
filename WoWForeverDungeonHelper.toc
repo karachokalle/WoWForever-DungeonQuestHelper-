@@ -2,9 +2,11 @@
 ## Title: WoW Forever Dungeon Quest Helper
 ## Notes: Wowhead-based starter quest database for WoW Forever 1.60.1.70374.
 ## Author: ChatGPT
-## Version: 0.8.0
+## Version: 0.9.9
 ## SavedVariables: WFDQHDB, WFDQH_UpdateRequested
 QuestData.lua
+DungeonLoot.lua
+RaidLoot.lua
 Core.lua
 
 
