@@ -1,8 +1,8 @@
 {
-  "version": "2026-10-16c",
+  "version": "2026-10-16d",
   "build": "1.60.1.70374",
   "source_build": "1.60.1.70425",
   "updated": "2026-10-16",
   "database_url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/QuestData.lua",
-  "sha256": "4ee5683a0a8f1e18e8c9405b59aca3db1826a63780563b4d7630b7ff405ceed7"
+  "sha256": "6e9191ce6f1711a3fa54e36bf612476a722cdf3dc14666df53882922c15c89a9"
 }
