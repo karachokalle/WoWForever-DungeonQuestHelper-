@@ -42,11 +42,22 @@ local function IsCompleted(questID)
     return false
 end
 
+local function IsQuestCompleted(q)
+    if q.questID and IsCompleted(q.questID) then return true end
+    for _, questID in ipairs(q.questIDs or {}) do
+        if IsCompleted(questID) then return true end
+    end
+    return false
+end
+
 local function HasQuestInLog(q)
+    local ids = {}
+    if q.questID then ids[q.questID] = true end
+    for _, questID in ipairs(q.questIDs or {}) do ids[questID] = true end
     if q.questID and C_QuestLog and C_QuestLog.GetInfo and C_QuestLog.GetNumQuestLogEntries then
         for i = 1, C_QuestLog.GetNumQuestLogEntries() do
             local info = C_QuestLog.GetInfo(i)
-            if info and not info.isHeader and info.questID == q.questID then return true end
+            if info and not info.isHeader and ids[info.questID] then return true end
         end
     end
     if GetNumQuestLogEntries and GetQuestLogTitle then
@@ -60,7 +71,7 @@ end
 
 local function GetStatus(q)
     if HasQuestInLog(q) then return "|cff55ddffIn Questlog|r" end
-    if q.questID and IsCompleted(q.questID) then return "|cffaaaaaaAbgeschlossen|r" end
+    if IsQuestCompleted(q) then return "|cffaaaaaaAbgeschlossen|r" end
     if PlayerLevel() < (q.minLevel or 1) then
         return "|cffff5555Mindestlevel " .. tostring(q.minLevel) .. " erforderlich|r"
     end
@@ -80,10 +91,11 @@ local function ClearRows()
 end
 
 local activeWaypoint
+local expandedQuestTitle
 local mapPin
-local mapNotice
 local arrowFrame
 local waypointTicker
+local nativeWaypointSet = false
 
 local function ParseCoordinates(q)
     if not q or not q.coordinates then return nil end
@@ -99,6 +111,107 @@ local function GetTargetZone(q)
         z = z:gsub('^%s+', ''):gsub('%s+$', '')
         return z
     end
+end
+
+local function NormalizeMapName(name)
+    return tostring(name or ""):lower():gsub("[%s%p]", "")
+end
+
+local function GetZoneAliases(zone)
+    local aliases = {
+        ["stormwind"] = {"Stormwind City", "Sturmwind"},
+        ["ironforge"] = {"Ironforge City", "Ironforge", "Eisenschmiede"},
+        ["badlands"] = {"Badlands", "Ödland"},
+        ["thebarrens"] = {"The Barrens", "Barrens", "Brachland"},
+        ["thousandneedles"] = {"Thousand Needles", "Tausend Nadeln"},
+        ["hillsbradfoothills"] = {"Hillsbrad Foothills", "Hillsbrad", "Vorgebirge des Hügellands"},
+        ["tarrenmill"] = {"Hillsbrad Foothills", "Vorgebirge des Hügellands"},
+        ["brill"] = {"Tirisfal Glades", "Tirisfal"},
+        ["silverpineforest"] = {"Silverpine Forest", "Silberwald"},
+        ["wetlands"] = {"Wetlands", "Sumpfland"},
+        ["darkshore"] = {"Darkshore", "Dunkelküste"},
+        ["ashenvale"] = {"Ashenvale", "Eschental"},
+        ["duskwood"] = {"Duskwood", "Dämmerwald"},
+        ["redridgemountains"] = {"Redridge Mountains", "Rotkammgebirge"},
+        ["burningsteppes"] = {"Burning Steppes", "Brennende Steppe"},
+        ["westernplaguelands"] = {"Western Plaguelands", "Westliche Pestländer"},
+        ["easternplaguelands"] = {"Eastern Plaguelands", "Östliche Pestländer"},
+        ["winterspring"] = {"Winterspring", "Winterquell"},
+        ["swampofsorrows"] = {"Swamp of Sorrows", "Sümpfe des Elends"},
+        ["hinterlands"] = {"The Hinterlands", "Hinterland"},
+        ["thehinterlands"] = {"The Hinterlands", "Hinterland"},
+        ["thunderbluff"] = {"Thunder Bluff", "Donnerfels"},
+        ["blackrockmountain"] = {"Blackrock Mountain", "Der Schwarzfels"},
+    }
+    local result = {zone}
+    for _, alias in ipairs(aliases[NormalizeMapName(zone)] or {}) do
+        table.insert(result, alias)
+    end
+    return result
+end
+
+local function FindMapIDForZone(zone)
+    if not zone or not C_Map or not C_Map.GetFallbackWorldMapID or not C_Map.GetMapChildrenInfo then return nil end
+    local root = C_Map.GetFallbackWorldMapID()
+    if not root then return nil end
+
+    local wanted = {}
+    for _, name in ipairs(GetZoneAliases(zone)) do wanted[NormalizeMapName(name)] = true end
+    local seen, stack = {}, {root}
+    while #stack > 0 do
+        local parentID = table.remove(stack)
+        if not seen[parentID] then
+            seen[parentID] = true
+            local ok, children = pcall(C_Map.GetMapChildrenInfo, parentID, nil, false)
+            if ok and type(children) == "table" then
+                for _, child in ipairs(children) do
+                    if child and child.mapID and child.name then
+                        if wanted[NormalizeMapName(child.name)] then return child.mapID, child.name end
+                        table.insert(stack, child.mapID)
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function SetNativeMapWaypoint(q, x, y)
+    if not C_Map or not C_Map.SetUserWaypoint or not UiMapPoint or not UiMapPoint.CreateFromCoordinates then return false end
+    local mapID = q.mapID
+    local mapName
+    if not mapID then mapID, mapName = FindMapIDForZone(GetTargetZone(q)) end
+    if not mapID then
+        print('|cffffcc00WFDQH:|r Kein Kartenbereich für „' .. tostring(GetTargetZone(q) or "unbekannt") .. '“ gefunden; der Questgeber-Pin konnte nicht gesetzt werden.')
+        return false
+    end
+    if C_Map.CanSetUserWaypointOnMap and not C_Map.CanSetUserWaypointOnMap(mapID) then
+        print('|cffffcc00WFDQH:|r Auf dieser Karte kann kein Ingame-Wegpunkt gesetzt werden.')
+        return false
+    end
+
+    if WorldMapFrame and WorldMapFrame.SetMapID then WorldMapFrame:SetMapID(mapID) end
+    if WorldMapFrame and WorldMapFrame.Show then WorldMapFrame:Show() end
+    local point = UiMapPoint.CreateFromCoordinates(mapID, x, y)
+    local ok, wasSet = pcall(C_Map.SetUserWaypoint, point)
+    if not ok or wasSet == false then
+        print('|cffffcc00WFDQH:|r Der WoW-Client hat den Karten-Pin nicht angenommen.')
+        return false
+    end
+    if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+        pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, true)
+    end
+    nativeWaypointSet = true
+    if mapPin then mapPin:Hide() end
+    return true, mapName
+end
+
+local function ClearNativeWaypoint()
+    if not nativeWaypointSet then return end
+    if C_Map and C_Map.ClearUserWaypoint then pcall(C_Map.ClearUserWaypoint) end
+    if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
+        pcall(C_SuperTrack.SetSuperTrackedUserWaypoint, false)
+    end
+    nativeWaypointSet = false
 end
 
 local function SameZone(a, b)
@@ -118,13 +231,15 @@ end
 
 local function RemoveMapPin()
     if mapPin then mapPin:Hide(); mapPin:SetParent(nil); mapPin = nil end
-    if mapNotice then mapNotice:Hide() end
 end
 
 local function UpdateMapPin()
+    if nativeWaypointSet then
+        if mapPin then mapPin:Hide() end
+        return
+    end
     if not activeWaypoint or not WorldMapFrame or not WorldMapFrame:IsShown() then
         if mapPin then mapPin:Hide() end
-        if mapNotice then mapNotice:Hide() end
         return
     end
     local tx, ty = ParseCoordinates(activeWaypoint)
@@ -161,24 +276,6 @@ local function UpdateMapPin()
 
     -- Keep a clear label visible even when the user has not navigated to the
     -- quest's zone yet; do not silently suppress the marker based on localized names.
-    if not mapNotice then
-        mapNotice = CreateFrame('Frame', nil, WorldMapFrame)
-        mapNotice:SetSize(360, 42)
-        mapNotice:SetPoint('TOP', WorldMapFrame, 'TOP', 0, -48)
-        mapNotice:SetFrameStrata('DIALOG')
-        local bg = mapNotice:CreateTexture(nil, 'BACKGROUND')
-        bg:SetAllPoints()
-        bg:SetTexture('Interface/Tooltips/UI-Tooltip-Background')
-        bg:SetVertexColor(0, 0, 0, 0.88)
-        local txt = mapNotice:CreateFontString(nil, 'OVERLAY', 'GameFontNormal')
-        txt:SetPoint('CENTER')
-        txt:SetWidth(345)
-        txt:SetJustifyH('CENTER')
-        mapNotice.text = txt
-    end
-    local targetZone = GetTargetZone(activeWaypoint) or 'Zielgebiet unbekannt'
-    mapNotice.text:SetText('Wegpunkt: ' .. targetZone .. '  (' .. math.floor(tx*100+0.5) .. ', ' .. math.floor(ty*100+0.5) .. ')')
-    mapNotice:Show()
 end
 
 local function CreateArrow()
@@ -222,7 +319,17 @@ local function UpdateWaypointArrow()
         arrowFrame:Show()
         return
     end
-    local px, py = GetPlayerMapPosition('player')
+    local px, py
+    if C_Map and C_Map.GetBestMapForUnit and C_Map.GetPlayerMapPosition then
+        local mapID = C_Map.GetBestMapForUnit('player')
+        local position = mapID and C_Map.GetPlayerMapPosition(mapID, 'player')
+        if position then
+            if position.GetXY then px, py = position:GetXY()
+            else px, py = position.x, position.y end
+        end
+    elseif GetPlayerMapPosition then
+        px, py = GetPlayerMapPosition('player')
+    end
     if not px or (px == 0 and py == 0) then
         arrowFrame.label:SetText(targetZone .. '\n' .. math.floor(tx*100+0.5) .. ', ' .. math.floor(ty*100+0.5))
         arrowFrame:Show(); return
@@ -244,22 +351,54 @@ local function SetWaypoint(q)
     end
     activeWaypoint = q
     UpdateWaypointArrow()
-    -- If the data entry provides a Classic map index, switch directly to it.
-    -- The legacy 1.60 client has no universal zone-name-to-map API.
-    if q.mapIndex and SetMapZoom then
-        pcall(SetMapZoom, q.mapIndex)
-    elseif q.mapID and SetMapByID then
-        pcall(SetMapByID, q.mapID)
+    local nativeSet = SetNativeMapWaypoint(q, x, y)
+    if not nativeSet then
+        -- On Forever, prefer a real user waypoint and don't draw a misleading
+        -- overlay on whichever unrelated map happened to be open.
+        if C_Map and C_Map.SetUserWaypoint then
+            activeWaypoint = nil
+            if arrowFrame then arrowFrame:Hide() end
+            return
+        end
+        -- Keep the visible map marker as a fallback on clients without native waypoint APIs.
+        nativeWaypointSet = false
+        if q.mapIndex and SetMapZoom then pcall(SetMapZoom, q.mapIndex)
+        elseif q.mapID and SetMapByID then pcall(SetMapByID, q.mapID) end
+        if WorldMapFrame and WorldMapFrame.Show then WorldMapFrame:Show() end
+        UpdateMapPin()
     end
-    if WorldMapFrame and WorldMapFrame.Show then WorldMapFrame:Show() end
-    UpdateMapPin()
-    print('|cff33ff99WFDQH Wegpunkt gesetzt:|r ' .. tostring(q.giver or q.title) .. ' – ' .. tostring(GetTargetZone(q)) .. ' (' .. math.floor(x*100+0.5) .. ', ' .. math.floor(y*100+0.5) .. '). /dqhelp clear zum Entfernen.')
+    print('|cff33ff99WFDQH Ingame-Pin gesetzt:|r ' .. tostring(q.giver or q.title) .. ' – ' .. tostring(GetTargetZone(q)) .. ' (' .. math.floor(x*100+0.5) .. ', ' .. math.floor(y*100+0.5) .. '). /dqhelp clear zum Entfernen.')
 end
 
-local function MakeRow(q, index)
-    local row = CreateFrame("Frame", nil, content, "BackdropTemplate")
-    row:SetSize(505, ROW_HEIGHT)
-    row:SetPoint("TOPLEFT", 0, -(index - 1) * ROW_HEIGHT)
+local function MakeRow(q, index, offset)
+    local rewards = q.rewards or {}
+    local hasRewards = q.xpReward or q.moneyReward or #rewards > 0
+    local summary
+    if hasRewards then
+        summary = (q.xpReward and (tostring(q.xpReward) .. " EP") or "") ..
+            (q.moneyReward and (" · " .. tostring(q.moneyReward)) or "") ..
+            (#rewards > 0 and (" · " .. (q.rewardChoices and "Auswahl aus " or "") .. #rewards .. " Gegenstand/Gegenständen") or "")
+    elseif q.rewardDataVerified then
+        summary = "Keine Geld-/Gegenstandsbelohnung dokumentiert"
+    else
+        summary = "Belohnungen nicht verifiziert"
+    end
+    local expanded = expandedQuestTitle == q.title
+    local rowHeight = ROW_HEIGHT + (expanded and 38 or 0)
+    local row = CreateFrame("Button", nil, content, "BackdropTemplate")
+    row:SetSize(505, rowHeight)
+    row:SetPoint("TOPLEFT", 0, -offset)
+    row:EnableMouse(true)
+    row:SetScript("OnClick", function()
+        expandedQuestTitle = expanded and nil or q.title
+        Refresh()
+    end)
+    row:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText("Belohnungen: " .. summary)
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
     row:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background" })
     row:SetBackdropColor(0.08, 0.08, 0.1, 0.88)
 
@@ -292,9 +431,31 @@ local function MakeRow(q, index)
     local pin = CreateFrame("Button", nil, row, "UIPanelButtonTemplate")
     pin:SetSize(72, 22)
     pin:SetPoint("TOPRIGHT", -8, -8)
-    pin:SetText("Karte")
+    pin:SetText("Pin")
     pin:SetScript("OnClick", function() SetWaypoint(q) end)
+    if expanded then
+        local rewardDetails = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        rewardDetails:SetPoint("TOPLEFT", pre, "BOTTOMLEFT", 0, -4)
+        rewardDetails:SetWidth(480)
+        if hasRewards then
+            local lines = {}
+            if q.xpReward then table.insert(lines, "Erfahrung: " .. tostring(q.xpReward) .. " EP") end
+            if q.moneyReward then table.insert(lines, "Geld: " .. tostring(q.moneyReward)) end
+            for _, reward in ipairs(rewards) do
+                local name = reward.name or reward
+                if reward.itemID and GetItemInfo then name = GetItemInfo(reward.itemID) or name end
+                table.insert(lines, "Gegenstand: " .. tostring(name))
+            end
+            if q.rewardChoices then table.insert(lines, 1, "Wähle einen Gegenstand") end
+            rewardDetails:SetText("Belohnungen: " .. table.concat(lines, " · "))
+        elseif q.rewardDataVerified then
+            rewardDetails:SetText("Keine Geld- oder Gegenstandsbelohnung dokumentiert; XP-Angaben fehlen in der Quelle.")
+        else
+            rewardDetails:SetText("Für diese Quest gibt es noch keine bestätigten Forever-Belohnungsdaten.")
+        end
+    end
     row:Show()
+    return rowHeight
 end
 
 local function Refresh()
@@ -309,7 +470,7 @@ local function Refresh()
         local levelOK = not WFDQHDB.hideTooHigh or (q.minLevel or 1) <= PlayerLevel()
         local text = ((q.title or "") .. " " .. (q.dungeon or "") .. " " .. (q.giver or "") .. " " .. (q.location or "")):lower()
         local searchOK = search == "" or text:find(search, 1, true)
-        local completedOK = not WFDQHDB.hideCompleted or not (q.questID and IsCompleted(q.questID))
+        local completedOK = not WFDQHDB.hideCompleted or not IsQuestCompleted(q)
         if factionOK and levelOK and searchOK and completedOK then
             table.insert(filtered, q)
         end
@@ -335,11 +496,12 @@ local function Refresh()
         end
         return tostring(a.title or ""):lower() < tostring(b.title or ""):lower()
     end)
+    local totalHeight = 0
     for _, q in ipairs(filtered) do
         shown = shown + 1
-        MakeRow(q, shown)
+        totalHeight = totalHeight + MakeRow(q, shown, totalHeight)
     end
-    content:SetHeight(math.max(1, shown * ROW_HEIGHT))
+    content:SetHeight(math.max(1, totalHeight))
     local activeSort = {}
     if sortBy.dungeon then table.insert(activeSort, "Dungeon") end
     if sortBy.level then table.insert(activeSort, "Level") end
@@ -384,6 +546,17 @@ local function CreateWindow()
     updateButton:SetScript("OnClick", function()
         WFDQH_UpdateRequested = true
         print("|cff33ff99WFDQH:|r Update angefordert. Jetzt |cffffff00/reload|r eingeben. Das Begleitprogramm muss laufen und eine geprüfte HTTPS-Datenquelle konfiguriert haben.")
+    end)
+    local clearPinButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    clearPinButton:SetSize(126, 24)
+    clearPinButton:SetPoint("TOPRIGHT", -16, -114)
+    clearPinButton:SetText("Pin löschen")
+    clearPinButton:SetScript("OnClick", function()
+        ClearNativeWaypoint()
+        activeWaypoint = nil
+        RemoveMapPin()
+        if arrowFrame then arrowFrame:Hide() end
+        print("|cff33ff99WFDQH:|r Wegpunkt entfernt.")
     end)
 
     WFDQHDB.sortBy = WFDQHDB.sortBy or {name = true, level = false, faction = false, dungeon = false}
@@ -460,11 +633,6 @@ local function CreateMinimapButton()
     icon:SetPoint("CENTER", b, "CENTER", 0, 0)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     b.icon = icon
-
-    local border = b:CreateTexture(nil, "OVERLAY")
-    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    border:SetAllPoints(b)
-    b.border = border
     b:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
     local function PlaceAtAngle(angle)
@@ -515,7 +683,7 @@ SlashCmdList.WFDQH = function(msg)
     if msg == "refresh" then Refresh()
     elseif msg == "hidehigh" then WFDQHDB.hideTooHigh = not WFDQHDB.hideTooHigh; Refresh()
     elseif msg == "clear" then
-        activeWaypoint = nil; RemoveMapPin(); if arrowFrame then arrowFrame:Hide() end
+        ClearNativeWaypoint(); activeWaypoint = nil; RemoveMapPin(); if arrowFrame then arrowFrame:Hide() end
         print("|cff33ff99WFDQH:|r Wegpunkt entfernt.")
     elseif msg == "dbversion" then
         print("|cff33ff99WFDQH Datenbank:|r Version " .. tostring(WFDQH_DATABASE_VERSION or "unbekannt") .. " · Quelle: " .. tostring(WFDQH_DATABASE_SOURCE or "unbekannt") .. " · Stand: " .. tostring(WFDQH_DATABASE_UPDATED or "?"))
@@ -550,3 +718,6 @@ WFDQH_MinimapInit:RegisterEvent("PLAYER_LOGIN")
 WFDQH_MinimapInit:SetScript("OnEvent", function()
     CreateMinimapButton()
 end)
+
+
+
