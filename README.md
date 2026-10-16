@@ -1,24 +1,30 @@
-# WoW Forever Dungeon Quest Helper – Datenfeed
+# WoW Forever Dungeon Quest Helper – Datenfeed und Addon
 
-Öffentlicher Datenfeed für den Begleit-Updater des Addons **WoWForeverDungeonHelper**.
+Öffentlicher Datenfeed und Quellcode für den Begleit-Updater des Addons **WoWForeverDungeonHelper** für den WoW Forever Client-Build `1.60.1.70374`.
 
 ## Updater-Manifest
 
 `https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/manifest.json`
 
-Das Manifest verweist auf `QuestData.lua` und enthält den SHA-256-Prüfwert, die Datenbankversion sowie den unterstützten Client-Build `1.60.1.70374`.
+Das Manifest verweist auf `QuestData.lua` und enthält die aktuelle Datenbankversion sowie eine SHA-256-Prüfsumme.
 
-## Wichtiger Datenhinweis
+## Addon herunterladen / installieren
 
-Die enthaltene Questliste ist eine **kuratierte Starter-Datenbank mit 114 Einträgen**, keine vollständige oder unabhängig verifizierte Datenbank. Die Ausgangsbasis ist die Wowhead-Forever-Dungeonquest-Übersicht. Quest-IDs und Koordinaten sind nicht durchgehend verifiziert; die Daten sollten im WoW-Forever-Client geprüft werden. Der SHA-256-Wert stellt sicher, dass der heruntergeladene Inhalt zum Manifest passt; er ist keine digitale Signatur und belegt nicht die inhaltliche Richtigkeit.
+Die für das Addon benötigten Dateien liegen im Repository: `WoWForeverDungeonHelper.toc`, `QuestData.lua` und `Core.lua`. Kopiere sie in einen Ordner namens `WoWForeverDungeonHelper` unter `World of Warcraft/Interface/AddOns/`.
+
+Aktuelle Addon-Version: **0.7.5**. Die Oberfläche enthält Sortierkriterien **Dungeon**, **Level**, **Fraktion** und **Name**. Ist Dungeon aktiv, werden Quest-Einträge alphabetisch nach Dungeon gruppiert; innerhalb derselben Dungeon-Gruppe greifen die weiteren eingeschalteten Kriterien.
+
+## Datenbankstand und Datenqualität
+
+- Datenbankversion: `2026-10-15a`
+- Client-Build: `1.60.1.70374`
+- Questdatenbank: 114 kuratierte Einträge
+
+Die Questliste ist eine Starter-Datenbank und keine vollständige, unabhängig verifizierte Datenbank. Quest-IDs und Koordinaten sind nicht durchgehend verifiziert. Eine passende SHA-256-Prüfsumme bestätigt die Integrität der heruntergeladenen Datei, nicht die Richtigkeit jedes Eintrags.
 
 ## Dateien
 
-- `QuestData.lua` – austauschbare Quest- und Dungeon-Daten
-- `manifest.json` – Version, unterstützter Build, Download-URL und SHA-256
-
-## Aktuelle Datenbank
-
-- Version: `2026-10-15a`
-- Stand: `2026-10-15`
-- Client-Build: `1.60.1.70374`
+- `manifest.json` – Version, Client-Build, Quelldatei und SHA-256
+- `QuestData.lua` – austauschbare Questdatenbank
+- `Core.lua` – Addon-Oberfläche, Filter, Dungeon-Sortierung und Wegpunktlogik
+- `WoWForeverDungeonHelper.toc` – Addon-Ladereihenfolge und Metadaten
