@@ -13,19 +13,19 @@
     },
     "DungeonLoot.lua": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/DungeonLoot.lua",
-      "sha256": "ba959e6c2bb28470d99ca68ac989ea22387e3720344c3dd02ea2688ba8419039"
+      "sha256": "a72946438ff9c0479371d950d0b2ff542378960fb8316fc37e68224d085c4ca6"
     },
     "RaidLoot.lua": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/RaidLoot.lua",
-      "sha256": "851f5c434ea4ee0f108794875453c32617aa6a6278f2d17e50133701db50dbbf"
+      "sha256": "fa59b3e9b56d002b09f92925d7ae658dca63cea987eda8ad5d5b1db3e7eb7ad7"
     },
     "Core.lua": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/Core.lua",
-      "sha256": "4e7165bea1d0597159675bbd4efa586a69ea96c1b7ef8f5e23cff8017cf6bf67"
+      "sha256": "8e90e7b98a9d2090b790f0c39d56a9a9674322f9da22f1134fb1dad5bd1324ab"
     },
     "WoWForeverDungeonHelper.toc": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/WoWForeverDungeonHelper.toc",
-      "sha256": "a12d7f2c3bf4bf413b87eb08acb59b7377d25b34e6b5f572b3acc0f1a009906b"
+      "sha256": "ae0ec68dc7024fedd4d7af0c51bfd4f254742550ffe7d0c702d3dc7dd3ee7bbd"
     }
   }
 }
