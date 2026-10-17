@@ -315,24 +315,24 @@ end
 -- "Main Hand") or its WoW inventory slot ID. Missing/unverified data stays empty.
 local PAPERDOLL_SLOTS = {
     { key = "Head", label = "Kopf", token = "HeadSlot", column = 1, row = 1 },
-    { key = "Hands", label = "Hände", token = "HandsSlot", column = 2, row = 1 },
     { key = "Neck", label = "Hals", token = "NeckSlot", column = 1, row = 2 },
-    { key = "Waist", label = "Taille", token = "WaistSlot", column = 2, row = 2 },
     { key = "Shoulder", label = "Schultern", token = "ShoulderSlot", column = 1, row = 3 },
-    { key = "Legs", label = "Beine", token = "LegsSlot", column = 2, row = 3 },
     { key = "Back", label = "Rücken", token = "BackSlot", column = 1, row = 4 },
-    { key = "Feet", label = "Füße", token = "FeetSlot", column = 2, row = 4 },
     { key = "Chest", label = "Brust", token = "ChestSlot", column = 1, row = 5 },
-    { key = "Finger1", label = "Ring 1", token = "Finger0Slot", column = 2, row = 5 },
     { key = "Shirt", label = "Hemd", token = "ShirtSlot", column = 1, row = 6 },
-    { key = "Finger2", label = "Ring 2", token = "Finger1Slot", column = 2, row = 6 },
     { key = "Tabard", label = "Wappenrock", token = "TabardSlot", column = 1, row = 7 },
-    { key = "Trinket1", label = "Schmuckstück 1", token = "Trinket0Slot", column = 2, row = 7 },
     { key = "Wrist", label = "Handgelenke", token = "WristSlot", column = 1, row = 8 },
-    { key = "Trinket2", label = "Schmuckstück 2", token = "Trinket1Slot", column = 2, row = 8 },
-    { key = "MainHand", label = "Waffenhand", token = "MainHandSlot", column = 1, row = 9 },
-    { key = "OffHand", label = "Nebenhand", token = "SecondaryHandSlot", column = 2, row = 9 },
-    { key = "Ranged", label = "Distanzwaffe", token = "RangedSlot", column = 1, row = 10 },
+    { key = "Finger1", label = "Ring 1", token = "Finger0Slot", column = 1, row = 9 },
+    { key = "Finger2", label = "Ring 2", token = "Finger1Slot", column = 1, row = 10 },
+    { key = "Hands", label = "Hände", token = "HandsSlot", column = 2, row = 1 },
+    { key = "Waist", label = "Taille", token = "WaistSlot", column = 2, row = 2 },
+    { key = "Legs", label = "Beine", token = "LegsSlot", column = 2, row = 3 },
+    { key = "Feet", label = "Füße", token = "FeetSlot", column = 2, row = 4 },
+    { key = "Trinket1", label = "Schmuckstück 1", token = "Trinket0Slot", column = 2, row = 5 },
+    { key = "Trinket2", label = "Schmuckstück 2", token = "Trinket1Slot", column = 2, row = 6 },
+    { key = "MainHand", label = "Waffenhand", token = "MainHandSlot", column = 2, row = 7 },
+    { key = "OffHand", label = "Nebenhand", token = "SecondaryHandSlot", column = 2, row = 8 },
+    { key = "Ranged", label = "Distanzwaffe", token = "RangedSlot", column = 2, row = 9 },
 }
 
 local GEAR_SLOT_ALIASES = {
@@ -391,15 +391,14 @@ local function RenderGearPaperDoll(targetContent, labels, items, title, detailLi
     local subtitle = targetContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     labels[#labels + 1] = subtitle
     subtitle:SetPoint("TOPLEFT", 6, -26)
-    subtitle:SetWidth(480)
-    subtitle:SetText("Ausrüstungsplätze · Gegenstand für Details überfahren")
+    subtitle:SetWidth(244)
+    subtitle:SetText("Ausrüstung · Tooltip für Details")
 
     for _, slot in ipairs(PAPERDOLL_SLOTS) do
-        local isWeaponRow = slot.row == 9 or slot.row == 10
-        local x = isWeaponRow and (slot.column == 1 and 92 or 272) or (slot.column == 1 and 0 or 252)
-        local y = isWeaponRow and -390 - (slot.row - 9) * 42 or -52 - (slot.row - 1) * 42
+        local x = slot.column == 1 and 0 or 496
+        local y = -52 - (slot.row - 1) * 42
         local card = CreateFrame("Button", nil, targetContent, "BackdropTemplate")
-        card:SetSize(isWeaponRow and 170 or 244, 38)
+        card:SetSize(244, 38)
         card:SetPoint("TOPLEFT", x, y)
         card:EnableMouse(true)
         card:RegisterForClicks("LeftButtonUp")
@@ -423,7 +422,7 @@ local function RenderGearPaperDoll(targetContent, labels, items, title, detailLi
 
         local slotText = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         slotText:SetPoint("TOPLEFT", icon, "TOPRIGHT", 5, -2)
-        slotText:SetWidth(card:GetWidth() - 44)
+        slotText:SetWidth(200)
         slotText:SetJustifyH("LEFT")
         slotText:SetText(slot.label)
 
@@ -438,7 +437,7 @@ local function RenderGearPaperDoll(targetContent, labels, items, title, detailLi
         end
         local itemText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         itemText:SetPoint("TOPLEFT", slotText, "BOTTOMLEFT", 0, -2)
-        itemText:SetWidth(card:GetWidth() - 44)
+        itemText:SetWidth(200)
         itemText:SetJustifyH("LEFT")
         itemText:SetText(name)
 
@@ -466,6 +465,47 @@ local function RenderGearPaperDoll(targetContent, labels, items, title, detailLi
         end)
         card:Show()
     end
+
+    local modelTitle = targetContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    labels[#labels + 1] = modelTitle
+    modelTitle:SetPoint("TOP", targetContent, "TOPLEFT", 370, -32)
+    modelTitle:SetText("Charaktervorschau")
+
+    local model = CreateFrame("DressUpModel", nil, targetContent, "BackdropTemplate")
+    model:SetSize(224, 390)
+    model:SetPoint("TOPLEFT", 258, -52)
+    model:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background", edgeFile = "Interface/Tooltips/UI-Tooltip-Border", edgeSize = 10, insets = { left = 3, right = 3, top = 3, bottom = 3 } })
+    model:SetBackdropColor(0.025, 0.03, 0.045, 0.72)
+    model:SetKeepModelOnHide(true)
+    local previewedIDs = {}
+    local previewLinks = {}
+    for _, item in ipairs(items or {}) do
+        local itemID = tonumber(item.itemID)
+        local link = item.itemLink or (itemID and ("item:" .. tostring(itemID)))
+        if link and model.TryOn then
+            previewLinks[#previewLinks + 1] = link
+            if itemID then
+                previewedIDs[itemID] = true
+                if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
+            end
+        end
+    end
+    local function ApplyPreviewItems(self)
+        for _, link in ipairs(previewLinks) do
+            if self.TryOn then pcall(self.TryOn, self, link) end
+        end
+    end
+    model:SetScript("OnModelLoaded", ApplyPreviewItems)
+    model:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    model:SetScript("OnEvent", function(self, _, itemID, success)
+        if success and previewedIDs[itemID] and self.TryOn then pcall(self.TryOn, self, "item:" .. tostring(itemID)) end
+    end)
+    model:SetUnit("player")
+    if model.SetSheathed then model:SetSheathed(false) end
+    if model.SetFacing then model:SetFacing(0) end
+    model:EnableMouse(true)
+    ApplyPreviewItems(model)
+    model:Show()
 
     local y = -478
     for _, lineText in ipairs(detailLines or {}) do
@@ -1131,7 +1171,7 @@ end
 
 local function CreateWindow()
     frame = CreateFrame("Frame", "WFDQH_MainFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(570, 560)
+    frame:SetSize(800, 640)
     frame:SetPoint("CENTER")
     frame:SetMovable(true); frame:EnableMouse(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
@@ -1348,7 +1388,7 @@ local function CreateWindow()
     if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(tierSpecDropdown, 190) end
     local tierScroll = CreateFrame("ScrollFrame", "WFDQH_TierScrollFrame", tierPanel, "UIPanelScrollFrameTemplate")
     tierScroll:SetPoint("TOPLEFT", 8, -34); tierScroll:SetPoint("BOTTOMRIGHT", -22, 25)
-    tierContent = CreateFrame("Frame", nil, tierScroll); tierContent:SetSize(500, 1); tierScroll:SetScrollChild(tierContent)
+    tierContent = CreateFrame("Frame", nil, tierScroll); tierContent:SetSize(740, 1); tierScroll:SetScrollChild(tierContent)
     tierStatus = tierPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     tierStatus:SetPoint("BOTTOMLEFT", 6, 5); tierStatus:SetPoint("BOTTOMRIGHT", -6, 5); tierStatus:SetJustifyH("LEFT")
     tierPanel:Hide()
@@ -1365,7 +1405,7 @@ local function CreateWindow()
     if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(gearModeDropdown, 110) end
     local gearScroll = CreateFrame("ScrollFrame", "WFDQH_GearScrollFrame", gearPanel, "UIPanelScrollFrameTemplate")
     gearScroll:SetPoint("TOPLEFT", 8, -34); gearScroll:SetPoint("BOTTOMRIGHT", -22, 25)
-    gearContent = CreateFrame("Frame", nil, gearScroll); gearContent:SetSize(500, 1); gearScroll:SetScrollChild(gearContent)
+    gearContent = CreateFrame("Frame", nil, gearScroll); gearContent:SetSize(740, 1); gearScroll:SetScrollChild(gearContent)
     gearStatus = gearPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     gearStatus:SetPoint("BOTTOMLEFT", 6, 5); gearStatus:SetPoint("BOTTOMRIGHT", -6, 5); gearStatus:SetJustifyH("LEFT")
     gearPanel:Hide()

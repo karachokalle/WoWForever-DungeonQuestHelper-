@@ -1,6 +1,6 @@
 # WoW Forever Dungeon Quest Helper
 
-Version **1.1.0** for WoW Forever client build `1.60.1.70374` (Interface `16001`).
+Version **1.2.0** for WoW Forever client build `1.60.1.70374` (Interface `16001`).
 
 ## Dateien im Addon
 
@@ -15,7 +15,7 @@ Kopiere alle sechs Dateien gemeinsam in `Interface/AddOns/WoWForeverDungeonHelpe
 
 ## Tiersets und Pre-BiS/BiS
 
-Die Reiter **Tiersets** und **Pre-BiS/BiS** zeigen Ausrüstung in einem Charakterfenster-Layout mit Kopf, Hals, Schultern, Rücken, Brust, Hemd, Wappenrock, Handgelenken, Händen, Taille, Beinen, Füßen, Ringen, Schmuckstücken und Waffenplätzen. Vorhandene Gegenstände verwenden die originalen Client-Icons, Tooltipps mit den verfügbaren Informationen und Shift-Linksklick zum Anprobieren. Nicht belegte oder unbestätigte Plätze bleiben als Platzhalter sichtbar.
+Die Reiter **Tiersets** und **Pre-BiS/BiS** zeigen Ausrüstung in einem Charakterfenster-Layout mit Slots links und rechts sowie dem 3D-Modell des eigenen Charakters in der Mitte. Hinterlegte Empfehlungsgegenstände werden nur auf diesem Vorschau-Modell angelegt; die echte Ausrüstung des Charakters wird nicht verändert. Vorhandene Gegenstände verwenden die originalen Client-Icons, Tooltipps mit den verfügbaren Informationen und Shift-Linksklick zum Anprobieren. Nicht belegte oder unbestätigte Plätze bleiben als Platzhalter sichtbar.
 
 Der Reiter **Tiersets** zeigt die für Season 1 verfügbaren klassenspezifischen Setboni aus Wowheads Forever-Übersicht. Wowhead kennzeichnet diese Angaben als Datamining, das sich noch ändern kann. Zu den neuen Sets sind derzeit noch keine bestätigten Gegenstandsteile und Bossquellen hinterlegt; die Oberfläche kennzeichnet diesen Stand.
 
