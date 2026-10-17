@@ -310,6 +310,185 @@ local function SetSimpleDropdown(dropdown, values, selected, onSelect, labelForV
     UIDropDownMenu_SetText(dropdown, labelForValue and labelForValue(selected) or selected)
 end
 
+-- Character-window-style gear layout shared by the Tiersets and Pre-BiS/BiS tabs.
+-- Item data can use the slot's English key (for example "Head", "Finger", or
+-- "Main Hand") or its WoW inventory slot ID. Missing/unverified data stays empty.
+local PAPERDOLL_SLOTS = {
+    { key = "Head", label = "Kopf", token = "HeadSlot", column = 1, row = 1 },
+    { key = "Hands", label = "Hände", token = "HandsSlot", column = 2, row = 1 },
+    { key = "Neck", label = "Hals", token = "NeckSlot", column = 1, row = 2 },
+    { key = "Waist", label = "Taille", token = "WaistSlot", column = 2, row = 2 },
+    { key = "Shoulder", label = "Schultern", token = "ShoulderSlot", column = 1, row = 3 },
+    { key = "Legs", label = "Beine", token = "LegsSlot", column = 2, row = 3 },
+    { key = "Back", label = "Rücken", token = "BackSlot", column = 1, row = 4 },
+    { key = "Feet", label = "Füße", token = "FeetSlot", column = 2, row = 4 },
+    { key = "Chest", label = "Brust", token = "ChestSlot", column = 1, row = 5 },
+    { key = "Finger1", label = "Ring 1", token = "Finger0Slot", column = 2, row = 5 },
+    { key = "Shirt", label = "Hemd", token = "ShirtSlot", column = 1, row = 6 },
+    { key = "Finger2", label = "Ring 2", token = "Finger1Slot", column = 2, row = 6 },
+    { key = "Tabard", label = "Wappenrock", token = "TabardSlot", column = 1, row = 7 },
+    { key = "Trinket1", label = "Schmuckstück 1", token = "Trinket0Slot", column = 2, row = 7 },
+    { key = "Wrist", label = "Handgelenke", token = "WristSlot", column = 1, row = 8 },
+    { key = "Trinket2", label = "Schmuckstück 2", token = "Trinket1Slot", column = 2, row = 8 },
+    { key = "MainHand", label = "Waffenhand", token = "MainHandSlot", column = 1, row = 9 },
+    { key = "OffHand", label = "Nebenhand", token = "SecondaryHandSlot", column = 2, row = 9 },
+    { key = "Ranged", label = "Distanzwaffe", token = "RangedSlot", column = 1, row = 10 },
+}
+
+local GEAR_SLOT_ALIASES = {
+    head = "Head", helm = "Head", neck = "Neck", necklace = "Neck",
+    shoulder = "Shoulder", shoulders = "Shoulder", cloak = "Back", back = "Back",
+    chest = "Chest", robe = "Chest", shirt = "Shirt", tabard = "Tabard",
+    wrist = "Wrist", wrists = "Wrist", bracer = "Wrist", bracers = "Wrist",
+    hands = "Hands", hand = "Hands", gloves = "Hands", glove = "Hands",
+    waist = "Waist", belt = "Waist", legs = "Legs", leg = "Legs", pants = "Legs",
+    feet = "Feet", boots = "Feet", boot = "Feet", finger = "Finger", ring = "Finger",
+    trinket = "Trinket", mainhand = "MainHand", weapon = "MainHand", offhand = "OffHand",
+    secondaryhand = "OffHand", ranged = "Ranged", rangedweapon = "Ranged",
+}
+
+local function NormalizeGearSlot(value)
+    if type(value) ~= "string" then return nil end
+    local key = value:lower():gsub("[%s%p_]", "")
+    if key == "finger1" or key == "ring1" then return "Finger1" end
+    if key == "finger2" or key == "ring2" then return "Finger2" end
+    if key == "trinket1" then return "Trinket1" end
+    if key == "trinket2" then return "Trinket2" end
+    return GEAR_SLOT_ALIASES[key]
+end
+
+local function GetGearSlotIcon(slot)
+    if GetInventorySlotInfo then
+        local _, texture = GetInventorySlotInfo(slot.token)
+        if texture then return texture end
+    end
+    return "Interface\\Icons\\INV_Misc_QuestionMark"
+end
+
+local function RenderGearPaperDoll(targetContent, labels, items, title, detailLines, footer)
+    local equipped = {}
+    local duplicateCounts = { Finger = 0, Trinket = 0 }
+    for _, item in ipairs(items or {}) do
+        local slot = NormalizeGearSlot(item.slot or item.equipSlot)
+        if slot == "Finger" or slot == "Trinket" then
+            duplicateCounts[slot] = duplicateCounts[slot] + 1
+            slot = slot .. math.min(duplicateCounts[slot], 2)
+        end
+        if not slot and tonumber(item.slotID or item.inventorySlot or item.slot) then
+            local numericSlot = tonumber(item.slotID or item.inventorySlot or item.slot)
+            local numericMap = { [1] = "Head", [2] = "Neck", [3] = "Shoulder", [4] = "Shirt", [5] = "Chest", [6] = "Waist", [7] = "Legs", [8] = "Feet", [9] = "Wrist", [10] = "Hands", [11] = "Finger1", [12] = "Finger2", [13] = "Trinket1", [14] = "Trinket2", [15] = "Back", [16] = "MainHand", [17] = "OffHand", [18] = "Ranged", [19] = "Tabard" }
+            slot = numericMap[numericSlot]
+        end
+        if slot and not equipped[slot] then equipped[slot] = item end
+    end
+
+    local heading = targetContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    labels[#labels + 1] = heading
+    heading:SetPoint("TOPLEFT", 6, -4)
+    heading:SetWidth(480)
+    heading:SetText(title or "Ausrüstung")
+
+    local subtitle = targetContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    labels[#labels + 1] = subtitle
+    subtitle:SetPoint("TOPLEFT", 6, -26)
+    subtitle:SetWidth(480)
+    subtitle:SetText("Ausrüstungsplätze · Gegenstand für Details überfahren")
+
+    for _, slot in ipairs(PAPERDOLL_SLOTS) do
+        local isWeaponRow = slot.row == 9 or slot.row == 10
+        local x = isWeaponRow and (slot.column == 1 and 92 or 272) or (slot.column == 1 and 0 or 252)
+        local y = isWeaponRow and -390 - (slot.row - 9) * 42 or -52 - (slot.row - 1) * 42
+        local card = CreateFrame("Button", nil, targetContent, "BackdropTemplate")
+        card:SetSize(isWeaponRow and 170 or 244, 38)
+        card:SetPoint("TOPLEFT", x, y)
+        card:EnableMouse(true)
+        card:RegisterForClicks("LeftButtonUp")
+        card:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background", edgeFile = "Interface/Tooltips/UI-Tooltip-Border", edgeSize = 8, insets = { left = 2, right = 2, top = 2, bottom = 2 } })
+        card:SetBackdropColor(0.06, 0.07, 0.09, 0.88)
+
+        local icon = card:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(32, 32)
+        icon:SetPoint("LEFT", card, "LEFT", 3, 0)
+        local item = equipped[slot.key]
+        local itemID = item and tonumber(item.itemID)
+        local itemName, itemLink, quality, _, _, _, _, _, _, texture
+        if itemID and GetItemInfo then
+            itemName, itemLink, quality, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+        end
+        if itemID and not texture and C_Item and C_Item.GetItemIconByID then
+            local ok, iconFileID = pcall(C_Item.GetItemIconByID, itemID)
+            if ok then texture = iconFileID end
+        end
+        icon:SetTexture(texture or (item and item.icon) or GetGearSlotIcon(slot))
+
+        local slotText = card:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        slotText:SetPoint("TOPLEFT", icon, "TOPRIGHT", 5, -2)
+        slotText:SetWidth(card:GetWidth() - 44)
+        slotText:SetJustifyH("LEFT")
+        slotText:SetText(slot.label)
+
+        local name = item and (itemName or item.name or (itemID and ("Gegenstand #" .. tostring(itemID))) or "Gegenstand nicht bestätigt") or "Keine Daten hinterlegt"
+        if item and quality and GetItemQualityColor then
+            local red, green, blue = GetItemQualityColor(quality)
+            if red and green and blue then
+                name = ("|cff%02x%02x%02x%s|r"):format(math.floor(red * 255 + 0.5), math.floor(green * 255 + 0.5), math.floor(blue * 255 + 0.5), name)
+            end
+        elseif not item then
+            name = "|cff888888" .. name .. "|r"
+        end
+        local itemText = card:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        itemText:SetPoint("TOPLEFT", slotText, "BOTTOMLEFT", 0, -2)
+        itemText:SetWidth(card:GetWidth() - 44)
+        itemText:SetJustifyH("LEFT")
+        itemText:SetText(name)
+
+        card:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if itemLink then GameTooltip:SetHyperlink(itemLink)
+            elseif itemID then GameTooltip:SetHyperlink("item:" .. tostring(itemID))
+            else GameTooltip:SetText(slot.label) end
+            if item then
+                if not itemLink and not itemID then GameTooltip:AddLine(item.name or "Gegenstand", 1, 1, 1, true) end
+                if item.source then GameTooltip:AddLine("Quelle: " .. tostring(item.source), 0.75, 0.85, 1, true) end
+                if item.stats then GameTooltip:AddLine(tostring(item.stats), 0.85, 0.85, 0.85, true) end
+                GameTooltip:AddLine("Shift + Linksklick: am Charakter anprobieren", 0.7, 0.85, 1, true)
+            else
+                GameTooltip:AddLine("Für diesen Platz sind noch keine bestätigten Gegenstandsdaten hinterlegt.", 1, 0.8, 0.3, true)
+            end
+            GameTooltip:Show()
+        end)
+        card:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        card:SetScript("OnClick", function(_, button)
+            if button ~= "LeftButton" or not IsShiftKeyDown() or not item then return end
+            local link = itemLink or (itemID and ("item:" .. tostring(itemID)))
+            if link and DressUpItemLink then DressUpItemLink(link)
+            elseif itemID and DressUpItem then DressUpItem(itemID) end
+        end)
+        card:Show()
+    end
+
+    local y = -478
+    for _, lineText in ipairs(detailLines or {}) do
+        local line = targetContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        labels[#labels + 1] = line
+        line:SetPoint("TOPLEFT", 6, y)
+        line:SetWidth(480)
+        line:SetJustifyH("LEFT")
+        line:SetText(lineText)
+        y = y - 18
+    end
+    if footer then
+        local note = targetContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        labels[#labels + 1] = note
+        note:SetPoint("TOPLEFT", 6, y - 4)
+        note:SetWidth(480)
+        note:SetJustifyH("LEFT")
+        note:SetText(footer)
+        y = y - 38
+    end
+    targetContent:SetHeight(math.max(1, -y))
+end
+
 local function ClearGearRows(targetContent, labels)
     if not targetContent then return end
     for _, child in ipairs({targetContent:GetChildren()}) do child:Hide(); child:SetParent(nil) end
@@ -345,51 +524,24 @@ RefreshTierSets = function()
         RefreshTierSets()
     end)
 
-    local y = -4
     local shown = 0
+    local selectedSet
     for _, setInfo in ipairs(WFDQH_TIER_SETS or {}) do
         if setInfo.class == className and setInfo.spec == selectedSpec then
             shown = shown + 1
-            local title = tierContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-            tierLabels[#tierLabels + 1] = title
-            title:SetPoint("TOPLEFT", 6, y)
-            title:SetWidth(480)
-            title:SetText(setInfo.name)
-            y = y - 24
-            local meta = tierContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-            tierLabels[#tierLabels + 1] = meta
-            meta:SetPoint("TOPLEFT", 6, y)
-            meta:SetWidth(480)
-            meta:SetText((setInfo.tier or "Tierset") .. " · " .. className .. " · " .. selectedSpec)
-            y = y - 20
-            for _, bonus in ipairs(setInfo.bonuses or {}) do
-                local line = tierContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                tierLabels[#tierLabels + 1] = line
-                line:SetPoint("TOPLEFT", 12, y)
-                line:SetWidth(475)
-                line:SetJustifyH("LEFT")
-                line:SetText((tostring(bonus.pieces) .. " Teile: ") .. tostring(bonus.text))
-                y = y - 18
-            end
-            local notice = tierContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-            tierLabels[#tierLabels + 1] = notice
-            notice:SetPoint("TOPLEFT", 6, y - 2)
-            notice:SetWidth(480)
-            notice:SetJustifyH("LEFT")
-            notice:SetText("Vorläufige Wowhead-Datamining-Daten; Gegenstandsteile und Bossquellen sind noch nicht bestätigt.")
-            y = y - 42
+            selectedSet = setInfo
+            break
         end
     end
-    if shown == 0 then
-        local empty = tierContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        tierLabels[#tierLabels + 1] = empty
-        empty:SetPoint("TOPLEFT", 6, -8)
-        empty:SetWidth(480)
-        empty:SetJustifyH("LEFT")
-        empty:SetText("Für diese Klasse/Spezialisierung liegt derzeit kein verifiziertes Forever-Tierset vor.")
-        y = -56
+    local detailLines = {}
+    for _, bonus in ipairs((selectedSet and selectedSet.bonuses) or {}) do
+        detailLines[#detailLines + 1] = tostring(bonus.pieces) .. " Teile: " .. tostring(bonus.text)
     end
-    tierContent:SetHeight(math.max(1, -y))
+    local title = selectedSet and selectedSet.name or (className .. " · " .. selectedSpec .. " · kein bestätigtes Tierset")
+    local footer = selectedSet
+        and "Vorläufige Wowhead-Datamining-Daten; konkrete Gegenstandsteile und Bossquellen sind noch nicht bestätigt."
+        or "Für diese Klasse/Spezialisierung liegt derzeit kein verifiziertes Forever-Tierset vor."
+    RenderGearPaperDoll(tierContent, tierLabels, selectedSet and (selectedSet.items or selectedSet.gear) or {}, title, detailLines, footer)
     tierStatus:SetText(("Quelle: Wowhead · %s · Stand %s · Datamining, Änderungen möglich"):format(WFDQH_TIER_DATA_SOURCE or "Wowhead Forever", WFDQH_GEAR_DATA_VERSION or "unbekannt"))
 end
 
@@ -431,21 +583,10 @@ RefreshGearLists = function()
     local byClass = WFDQH_GEAR_LISTS and WFDQH_GEAR_LISTS[className]
     local bySpec = byClass and byClass[selectedSpec]
     local items = bySpec and bySpec[mode] or {}
-    local y = -4
-    for _, item in ipairs(items) do
-        MakeLootItem(gearContent, item, item.source or item.slot or mode, 0, y)
-        y = y - 62
-    end
-    if #items == 0 then
-        local empty = gearContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        gearLabels[#gearLabels + 1] = empty
-        empty:SetPoint("TOPLEFT", 6, -8)
-        empty:SetWidth(480)
-        empty:SetJustifyH("LEFT")
-        empty:SetText((WFDQH_GEAR_DATA_STATUS or "Für diese Auswahl sind noch keine verifizierten Forever-Empfehlungen hinterlegt.") .. "\n\nDie Auswahl bleibt vorbereitet; sobald belastbare Forever-Daten verfügbar sind, können die Slots hier ergänzt werden.")
-        y = -100
-    end
-    gearContent:SetHeight(math.max(1, -y))
+    local footer = #items == 0
+        and ((WFDQH_GEAR_DATA_STATUS or "Für diese Auswahl sind noch keine verifizierten Forever-Empfehlungen hinterlegt.") .. " Sobald belastbare Daten vorliegen, werden die bestätigten Gegenstände den Slots zugeordnet.")
+        or "Slotdaten, Item-Tooltips und Quelle zeigen die verfügbaren Details. Shift + Linksklick probiert einen Gegenstand am Charakter an."
+    RenderGearPaperDoll(gearContent, gearLabels, items, className .. " · " .. selectedSpec .. " · " .. mode, {}, footer)
     gearStatus:SetText(("%s · %s · %s · nur Forever-Empfehlungen"):format(className, selectedSpec, mode))
 end
 

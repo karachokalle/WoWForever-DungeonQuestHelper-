@@ -1,6 +1,6 @@
 {
-  "version": "2026-10-17a",
-  "addon_version": "1.0.0",
+  "version": "2026-10-17b",
+  "addon_version": "1.1.0",
   "build": "1.60.1.70374",
   "source_build": "1.60.1.70425",
   "updated": "2026-10-17",
@@ -9,7 +9,7 @@
   "addon_files": {
     "Core.lua": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/Core.lua",
-      "sha256": "50a4e6bc70df044b9bca933df0763291bbd90d077c4418c558943175a2b603bc"
+      "sha256": "82a018f4d5d9fb956d844af835214788c64695525a58116a46ecc559b2b49a8e"
     },
     "QuestData.lua": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/QuestData.lua",
@@ -29,11 +29,11 @@
     },
     "WoWForeverDungeonHelper.toc": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/WoWForeverDungeonHelper.toc",
-      "sha256": "73d84ec40c3fa1bc54573d8a1f2f1ad3b6150f762e56860ace976a19f1b530fe"
+      "sha256": "fcbf9708338ca556b9f9be792b1725c03300f4305e7d0944382b3f57a3f87c88"
     },
     "README.md": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/README.md",
-      "sha256": "d26161c0e601ce95b6a360eb2f5596e5c723bcf2839c9858b0c2599025ab5a5c"
+      "sha256": "6efd94c74335ab2b1554536bf233a178b3d0b77e1a5d5cd51d93f2c6625a562d"
     }
   }
 }

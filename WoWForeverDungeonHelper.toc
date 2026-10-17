@@ -2,7 +2,7 @@
 ## Title: WoW Forever Dungeon Quest Helper
 ## Notes: Quests, loot, tier sets and gear lists for WoW Forever 1.60.1.70374.
 ## Author: ChatGPT
-## Version: 1.0.0
+## Version: 1.1.0
 ## SavedVariables: WFDQHDB, WFDQH_UpdateRequested
 QuestData.lua
 DungeonLoot.lua
