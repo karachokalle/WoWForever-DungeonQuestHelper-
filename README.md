@@ -1,6 +1,6 @@
 # WoW Forever Dungeon Quest Helper
 
-Version **0.9.9** for WoW Forever client build `1.60.1.70374` (Interface `16001`).
+Version **1.0.0** for WoW Forever client build `1.60.1.70374` (Interface `16001`).
 
 ## Dateien im Addon
 
@@ -8,9 +8,16 @@ Version **0.9.9** for WoW Forever client build `1.60.1.70374` (Interface `16001`
 - `QuestData.lua` enthält Questgeber, Quest-IDs, Belohnungen und verfügbare EP-Angaben.
 - `DungeonLoot.lua` enthält Dungeon-Bosse, Gegenstands-IDs und verfügbare Dropchancen.
 - `RaidLoot.lua` enthält Raid-Bosse, Gegenstands-IDs und verfügbare Dropchancen.
+- `GearData.lua` enthält die verfügbaren Tierset-Boni sowie die vorbereitete Datenstruktur für Pre-BiS/BiS.
 - `WoWForeverDungeonHelper.toc` lädt die Datendateien vor `Core.lua`.
 
-Kopiere alle fünf Dateien gemeinsam in `Interface/AddOns/WoWForeverDungeonHelper`. Öffne das Addon im Spiel mit `/dqhelp`.
+Kopiere alle sechs Dateien gemeinsam in `Interface/AddOns/WoWForeverDungeonHelper`. Öffne das Addon im Spiel mit `/dqhelp`.
+
+## Tiersets und Pre-BiS/BiS
+
+Der Reiter **Tiersets** zeigt die für Season 1 verfügbaren klassenspezifischen Setboni aus Wowheads Forever-Übersicht. Wowhead kennzeichnet diese Angaben als Datamining, das sich noch ändern kann. Zu den neuen Sets sind derzeit noch keine bestätigten Gegenstandsteile und Bossquellen hinterlegt; die Oberfläche kennzeichnet diesen Stand.
+
+Der Reiter **Pre-BiS/BiS** bietet Klassenauswahl, Spezialisierung und Umschaltung zwischen Pre-BiS und BiS. Für WoW Forever sind in den verfügbaren Wowhead-Quellen noch keine bestätigten Empfehlungen hinterlegt. Deshalb bleibt die Liste zunächst leer, statt Classic-Empfehlungen als Forever-Daten auszugeben.
 
 ## Datenstand und Grenzen
 
@@ -22,4 +29,4 @@ Der Spielclient liefert die Gegenstandssymbole und Item-Tooltips. Bei noch nicht
 
 ## Manifest
 
-`manifest.json` enthält die direkten Raw-GitHub-URLs und SHA-256-Prüfsummen der Quest-, Dungeonloot- und Raidloot-Datenbanken. Questdaten bleiben außerdem unter den bisherigen Feldern `database_url` und `sha256` erreichbar.
+`manifest.json` enthält die direkten Raw-GitHub-URLs und SHA-256-Prüfsummen der Quest-, Dungeonloot-, Raidloot- und Gear-Datenbanken. Questdaten bleiben außerdem unter den bisherigen Feldern `database_url` und `sha256` erreichbar.

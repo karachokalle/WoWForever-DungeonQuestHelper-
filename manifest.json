@@ -1,12 +1,16 @@
 {
-  "version": "2026-10-16d",
-  "addon_version": "0.9.9",
+  "version": "2026-10-17a",
+  "addon_version": "1.0.0",
   "build": "1.60.1.70374",
   "source_build": "1.60.1.70425",
-  "updated": "2026-10-16",
+  "updated": "2026-10-17",
   "database_url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/QuestData.lua",
   "sha256": "6e9191ce6f1711a3fa54e36bf612476a722cdf3dc14666df53882922c15c89a9",
   "addon_files": {
+    "Core.lua": {
+      "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/Core.lua",
+      "sha256": "50a4e6bc70df044b9bca933df0763291bbd90d077c4418c558943175a2b603bc"
+    },
     "QuestData.lua": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/QuestData.lua",
       "sha256": "6e9191ce6f1711a3fa54e36bf612476a722cdf3dc14666df53882922c15c89a9"
@@ -19,13 +23,17 @@
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/RaidLoot.lua",
       "sha256": "fa59b3e9b56d002b09f92925d7ae658dca63cea987eda8ad5d5b1db3e7eb7ad7"
     },
-    "Core.lua": {
-      "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/Core.lua",
-      "sha256": "8e90e7b98a9d2090b790f0c39d56a9a9674322f9da22f1134fb1dad5bd1324ab"
+    "GearData.lua": {
+      "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/GearData.lua",
+      "sha256": "e2425857f61f3c84f1b3b5bddba2c30b1b87acc0b17e7c66c22ea1b35f036217"
     },
     "WoWForeverDungeonHelper.toc": {
       "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/WoWForeverDungeonHelper.toc",
-      "sha256": "ae0ec68dc7024fedd4d7af0c51bfd4f254742550ffe7d0c702d3dc7dd3ee7bbd"
+      "sha256": "73d84ec40c3fa1bc54573d8a1f2f1ad3b6150f762e56860ace976a19f1b530fe"
+    },
+    "README.md": {
+      "url": "https://raw.githubusercontent.com/karachokalle/WoWForever-DungeonQuestHelper-/main/README.md",
+      "sha256": "d26161c0e601ce95b6a360eb2f5596e5c723bcf2839c9858b0c2599025ab5a5c"
     }
   }
 }

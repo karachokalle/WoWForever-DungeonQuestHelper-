@@ -12,6 +12,10 @@ local raidList = WFDQH_RAID_LOOT or {}
 local raidPanel, raidContent, raidStatus, raidDropdown, raidBossDropdown
 local lootLabels, raidLabels = {}, {}
 local RefreshLoot, RefreshRaid
+local tierPanel, tierContent, tierStatus, tierClassDropdown, tierSpecDropdown
+local gearPanel, gearContent, gearStatus, gearClassDropdown, gearSpecDropdown, gearModeDropdown
+local tierLabels, gearLabels = {}, {}
+local RefreshTierSets, RefreshGearLists
 local ROW_HEIGHT = 100
 local Refresh
 
@@ -278,6 +282,171 @@ end
 
 RefreshRaid = function()
     RefreshLootView(raidList, "raidInstance", "raidBoss", raidDropdown, raidBossDropdown, raidContent, raidStatus, raidLabels, "Raid", RefreshRaid)
+end
+
+local function GetGearClass(name)
+    for _, classInfo in ipairs(WFDQH_GEAR_CLASSES or {}) do
+        if classInfo.name == name then return classInfo end
+    end
+    return (WFDQH_GEAR_CLASSES or {})[1]
+end
+
+local function SetSimpleDropdown(dropdown, values, selected, onSelect, labelForValue)
+    if not dropdown or not UIDropDownMenu_Initialize then return end
+    UIDropDownMenu_Initialize(dropdown, function(_, level)
+        for _, value in ipairs(values or {}) do
+            local info = UIDropDownMenu_CreateInfo()
+            info.text = labelForValue and labelForValue(value) or value
+            info.value = value
+            info.func = function()
+                onSelect(value)
+                UIDropDownMenu_SetSelectedValue(dropdown, value)
+                UIDropDownMenu_SetText(dropdown, labelForValue and labelForValue(value) or value)
+            end
+            UIDropDownMenu_AddButton(info, level)
+        end
+    end)
+    UIDropDownMenu_SetSelectedValue(dropdown, selected)
+    UIDropDownMenu_SetText(dropdown, labelForValue and labelForValue(selected) or selected)
+end
+
+local function ClearGearRows(targetContent, labels)
+    if not targetContent then return end
+    for _, child in ipairs({targetContent:GetChildren()}) do child:Hide(); child:SetParent(nil) end
+    for i = #labels, 1, -1 do labels[i]:Hide(); labels[i] = nil end
+end
+
+RefreshTierSets = function()
+    if not tierContent then return end
+    ClearGearRows(tierContent, tierLabels)
+    local classes = WFDQH_GEAR_CLASSES or {}
+    if #classes == 0 then
+        tierStatus:SetText("Für die Tiersets sind noch keine Klassendaten geladen.")
+        return
+    end
+    local classInfo = GetGearClass(WFDQHDB.gearClass)
+    local className = classInfo.name
+    WFDQHDB.gearClass = className
+    local selectedSpec = WFDQHDB.gearSpec
+    local specExists = false
+    for _, spec in ipairs(classInfo.specs or {}) do if spec == selectedSpec then specExists = true end end
+    if not specExists then selectedSpec = (classInfo.specs or {})[1] end
+    WFDQHDB.gearSpec = selectedSpec
+    local classNames = {}
+    for _, class in ipairs(classes) do classNames[#classNames + 1] = class.name end
+    SetSimpleDropdown(tierClassDropdown, classNames, className, function(value)
+        WFDQHDB.gearClass = value
+        local newClass = GetGearClass(value)
+        WFDQHDB.gearSpec = newClass and newClass.specs[1] or nil
+        RefreshTierSets()
+    end)
+    SetSimpleDropdown(tierSpecDropdown, classInfo.specs or {}, selectedSpec, function(value)
+        WFDQHDB.gearSpec = value
+        RefreshTierSets()
+    end)
+
+    local y = -4
+    local shown = 0
+    for _, setInfo in ipairs(WFDQH_TIER_SETS or {}) do
+        if setInfo.class == className and setInfo.spec == selectedSpec then
+            shown = shown + 1
+            local title = tierContent:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+            tierLabels[#tierLabels + 1] = title
+            title:SetPoint("TOPLEFT", 6, y)
+            title:SetWidth(480)
+            title:SetText(setInfo.name)
+            y = y - 24
+            local meta = tierContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            tierLabels[#tierLabels + 1] = meta
+            meta:SetPoint("TOPLEFT", 6, y)
+            meta:SetWidth(480)
+            meta:SetText((setInfo.tier or "Tierset") .. " · " .. className .. " · " .. selectedSpec)
+            y = y - 20
+            for _, bonus in ipairs(setInfo.bonuses or {}) do
+                local line = tierContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                tierLabels[#tierLabels + 1] = line
+                line:SetPoint("TOPLEFT", 12, y)
+                line:SetWidth(475)
+                line:SetJustifyH("LEFT")
+                line:SetText((tostring(bonus.pieces) .. " Teile: ") .. tostring(bonus.text))
+                y = y - 18
+            end
+            local notice = tierContent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            tierLabels[#tierLabels + 1] = notice
+            notice:SetPoint("TOPLEFT", 6, y - 2)
+            notice:SetWidth(480)
+            notice:SetJustifyH("LEFT")
+            notice:SetText("Vorläufige Wowhead-Datamining-Daten; Gegenstandsteile und Bossquellen sind noch nicht bestätigt.")
+            y = y - 42
+        end
+    end
+    if shown == 0 then
+        local empty = tierContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        tierLabels[#tierLabels + 1] = empty
+        empty:SetPoint("TOPLEFT", 6, -8)
+        empty:SetWidth(480)
+        empty:SetJustifyH("LEFT")
+        empty:SetText("Für diese Klasse/Spezialisierung liegt derzeit kein verifiziertes Forever-Tierset vor.")
+        y = -56
+    end
+    tierContent:SetHeight(math.max(1, -y))
+    tierStatus:SetText(("Quelle: Wowhead · %s · Stand %s · Datamining, Änderungen möglich"):format(WFDQH_TIER_DATA_SOURCE or "Wowhead Forever", WFDQH_GEAR_DATA_VERSION or "unbekannt"))
+end
+
+RefreshGearLists = function()
+    if not gearContent then return end
+    ClearGearRows(gearContent, gearLabels)
+    local classes = WFDQH_GEAR_CLASSES or {}
+    if #classes == 0 then
+        gearStatus:SetText("Für Pre-BiS/BiS sind noch keine Klassendaten geladen.")
+        return
+    end
+    local classInfo = GetGearClass(WFDQHDB.gearClass)
+    local className = classInfo.name
+    WFDQHDB.gearClass = className
+    local selectedSpec = WFDQHDB.gearSpec
+    local specExists = false
+    for _, spec in ipairs(classInfo.specs or {}) do if spec == selectedSpec then specExists = true end end
+    if not specExists then selectedSpec = (classInfo.specs or {})[1] end
+    WFDQHDB.gearSpec = selectedSpec
+    local classNames = {}
+    for _, class in ipairs(classes) do classNames[#classNames + 1] = class.name end
+    SetSimpleDropdown(gearClassDropdown, classNames, className, function(value)
+        WFDQHDB.gearClass = value
+        local newClass = GetGearClass(value)
+        WFDQHDB.gearSpec = newClass and newClass.specs[1] or nil
+        RefreshGearLists()
+    end)
+    SetSimpleDropdown(gearSpecDropdown, classInfo.specs or {}, selectedSpec, function(value)
+        WFDQHDB.gearSpec = value
+        RefreshGearLists()
+    end)
+    local modes = { "Pre-BiS", "BiS" }
+    local mode = WFDQHDB.gearMode or "Pre-BiS"
+    if mode ~= "BiS" then mode = "Pre-BiS" end
+    SetSimpleDropdown(gearModeDropdown, modes, mode, function(value)
+        WFDQHDB.gearMode = value
+        RefreshGearLists()
+    end)
+    local byClass = WFDQH_GEAR_LISTS and WFDQH_GEAR_LISTS[className]
+    local bySpec = byClass and byClass[selectedSpec]
+    local items = bySpec and bySpec[mode] or {}
+    local y = -4
+    for _, item in ipairs(items) do
+        MakeLootItem(gearContent, item, item.source or item.slot or mode, 0, y)
+        y = y - 62
+    end
+    if #items == 0 then
+        local empty = gearContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        gearLabels[#gearLabels + 1] = empty
+        empty:SetPoint("TOPLEFT", 6, -8)
+        empty:SetWidth(480)
+        empty:SetJustifyH("LEFT")
+        empty:SetText((WFDQH_GEAR_DATA_STATUS or "Für diese Auswahl sind noch keine verifizierten Forever-Empfehlungen hinterlegt.") .. "\n\nDie Auswahl bleibt vorbereitet; sobald belastbare Forever-Daten verfügbar sind, können die Slots hier ergänzt werden.")
+        y = -100
+    end
+    gearContent:SetHeight(math.max(1, -y))
+    gearStatus:SetText(("%s · %s · %s · nur Forever-Empfehlungen"):format(className, selectedSpec, mode))
 end
 
 local activeWaypoint
@@ -826,7 +995,7 @@ local function CreateWindow()
     frame:SetMovable(true); frame:EnableMouse(true); frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetClampedToScreen(true); frame:Hide()
-    frame.TitleText:SetText("WoW Forever – Dungeon Quest Helper")
+    frame.TitleText:SetText("WoW Forever – Quest & Gear Helper")
 
     local function TrackQuestWidget(widget)
         table.insert(questWidgets, widget)
@@ -839,22 +1008,34 @@ local function CreateWindow()
         end
         if lootPanel then lootPanel:SetShown(tab == "loot") end
         if raidPanel then raidPanel:SetShown(tab == "raids") end
+        if tierPanel then tierPanel:SetShown(tab == "tiersets") end
+        if gearPanel then gearPanel:SetShown(tab == "gear") end
         if tab == "loot" then RefreshLoot()
         elseif tab == "raids" then RefreshRaid()
+        elseif tab == "tiersets" then RefreshTierSets()
+        elseif tab == "gear" then RefreshGearLists()
         else Refresh() end
     end
     local questsTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    questsTab:SetSize(112, 22); questsTab:SetPoint("TOPLEFT", 16, -30)
+    questsTab:SetSize(76, 22); questsTab:SetPoint("TOPLEFT", 16, -30)
     questsTab:SetText("Quests")
     questsTab:SetScript("OnClick", function() SetActiveTab("quests") end)
     local lootTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    lootTab:SetSize(112, 22); lootTab:SetPoint("LEFT", questsTab, "RIGHT", 6, 0)
+    lootTab:SetSize(104, 22); lootTab:SetPoint("LEFT", questsTab, "RIGHT", 5, 0)
     lootTab:SetText("Dungeon Drops")
     lootTab:SetScript("OnClick", function() SetActiveTab("loot") end)
     local raidTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    raidTab:SetSize(90, 22); raidTab:SetPoint("LEFT", lootTab, "RIGHT", 6, 0)
+    raidTab:SetSize(54, 22); raidTab:SetPoint("LEFT", lootTab, "RIGHT", 5, 0)
     raidTab:SetText("Raids")
     raidTab:SetScript("OnClick", function() SetActiveTab("raids") end)
+    local tierTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    tierTab:SetSize(72, 22); tierTab:SetPoint("LEFT", raidTab, "RIGHT", 5, 0)
+    tierTab:SetText("Tiersets")
+    tierTab:SetScript("OnClick", function() SetActiveTab("tiersets") end)
+    local gearTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    gearTab:SetSize(100, 22); gearTab:SetPoint("LEFT", tierTab, "RIGHT", 5, 0)
+    gearTab:SetText("Pre-BiS/BiS")
+    gearTab:SetScript("OnClick", function() SetActiveTab("gear") end)
 
     local info = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     info:SetPoint("TOPLEFT", 16, -58); info:SetPoint("TOPRIGHT", -16, -58); info:SetJustifyH("LEFT")
@@ -1016,9 +1197,42 @@ local function CreateWindow()
     raidStatus = raidPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     raidStatus:SetPoint("BOTTOMLEFT", 6, 5); raidStatus:SetPoint("BOTTOMRIGHT", -6, 5); raidStatus:SetJustifyH("LEFT")
     raidPanel:Hide()
+    tierPanel = CreateFrame("Frame", nil, frame)
+    tierPanel:SetPoint("TOPLEFT", 12, -56); tierPanel:SetPoint("BOTTOMRIGHT", -28, 36)
+    tierClassDropdown = CreateFrame("Frame", "WFDQH_TierClassDropdown", tierPanel, "UIDropDownMenuTemplate")
+    tierClassDropdown:SetPoint("TOPLEFT", -12, 4)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(tierClassDropdown, 160) end
+    tierSpecDropdown = CreateFrame("Frame", "WFDQH_TierSpecDropdown", tierPanel, "UIDropDownMenuTemplate")
+    tierSpecDropdown:SetPoint("LEFT", tierClassDropdown, "RIGHT", -18, 0)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(tierSpecDropdown, 190) end
+    local tierScroll = CreateFrame("ScrollFrame", "WFDQH_TierScrollFrame", tierPanel, "UIPanelScrollFrameTemplate")
+    tierScroll:SetPoint("TOPLEFT", 8, -34); tierScroll:SetPoint("BOTTOMRIGHT", -22, 25)
+    tierContent = CreateFrame("Frame", nil, tierScroll); tierContent:SetSize(500, 1); tierScroll:SetScrollChild(tierContent)
+    tierStatus = tierPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    tierStatus:SetPoint("BOTTOMLEFT", 6, 5); tierStatus:SetPoint("BOTTOMRIGHT", -6, 5); tierStatus:SetJustifyH("LEFT")
+    tierPanel:Hide()
+    gearPanel = CreateFrame("Frame", nil, frame)
+    gearPanel:SetPoint("TOPLEFT", 12, -56); gearPanel:SetPoint("BOTTOMRIGHT", -28, 36)
+    gearClassDropdown = CreateFrame("Frame", "WFDQH_GearClassDropdown", gearPanel, "UIDropDownMenuTemplate")
+    gearClassDropdown:SetPoint("TOPLEFT", -12, 4)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(gearClassDropdown, 155) end
+    gearSpecDropdown = CreateFrame("Frame", "WFDQH_GearSpecDropdown", gearPanel, "UIDropDownMenuTemplate")
+    gearSpecDropdown:SetPoint("LEFT", gearClassDropdown, "RIGHT", -18, 0)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(gearSpecDropdown, 175) end
+    gearModeDropdown = CreateFrame("Frame", "WFDQH_GearModeDropdown", gearPanel, "UIDropDownMenuTemplate")
+    gearModeDropdown:SetPoint("LEFT", gearSpecDropdown, "RIGHT", -18, 0)
+    if UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(gearModeDropdown, 110) end
+    local gearScroll = CreateFrame("ScrollFrame", "WFDQH_GearScrollFrame", gearPanel, "UIPanelScrollFrameTemplate")
+    gearScroll:SetPoint("TOPLEFT", 8, -34); gearScroll:SetPoint("BOTTOMRIGHT", -22, 25)
+    gearContent = CreateFrame("Frame", nil, gearScroll); gearContent:SetSize(500, 1); gearScroll:SetScrollChild(gearContent)
+    gearStatus = gearPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    gearStatus:SetPoint("BOTTOMLEFT", 6, 5); gearStatus:SetPoint("BOTTOMRIGHT", -6, 5); gearStatus:SetJustifyH("LEFT")
+    gearPanel:Hide()
     frame:SetScript("OnShow", function()
         if WFDQHDB.activeTab == "loot" then RefreshLoot()
         elseif WFDQHDB.activeTab == "raids" then RefreshRaid()
+        elseif WFDQHDB.activeTab == "tiersets" then RefreshTierSets()
+        elseif WFDQHDB.activeTab == "gear" then RefreshGearLists()
         else Refresh() end
     end)
     SetActiveTab(WFDQHDB.activeTab)
@@ -1114,6 +1328,8 @@ events:SetScript("OnEvent", function(_, event)
     if frame and frame:IsShown() then
         if WFDQHDB.activeTab == "loot" then RefreshLoot()
         elseif WFDQHDB.activeTab == "raids" then RefreshRaid()
+        elseif WFDQHDB.activeTab == "tiersets" then RefreshTierSets()
+        elseif WFDQHDB.activeTab == "gear" then RefreshGearLists()
         else Refresh() end
     end
     if activeWaypoint then UpdateWaypointArrow(); UpdateMapPin() end
@@ -1132,6 +1348,8 @@ if itemInfoEventRegistered then
         if frame and frame:IsShown() then
             if WFDQHDB.activeTab == "loot" then RefreshLoot()
             elseif WFDQHDB.activeTab == "raids" then RefreshRaid()
+            elseif WFDQHDB.activeTab == "tiersets" then RefreshTierSets()
+            elseif WFDQHDB.activeTab == "gear" then RefreshGearLists()
             else Refresh() end
         end
     end)
